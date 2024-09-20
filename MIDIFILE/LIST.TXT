@@ -1,0 +1,7 @@
+Boy From New York City,BOYFRMNY.MID,2.6
+Bridge Over Troubled Waters,BLDGTBWAT.MID,1.0
+Dancing Queen,DANCINGQ.MID,1.3
+Honesty,HONESTY.MID,1.1
+Sound of Silence,SNDOFSLC.MID,1.5
+Take On Me,TAKEONME.MID,2.0
+We Build This City,WEBLDCTY.MID,2.0
