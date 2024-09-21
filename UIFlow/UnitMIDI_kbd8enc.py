@@ -6,6 +6,7 @@
 #     CardKB v1.1 for M5Stack
 #     8encoder unit for M5Stack (U153)
 #     Micro SD card
+#     MIDI-IN instruments (Optional)
 #
 #   Program: micropython for UIFlow2.0 (V2.1.4)
 #
@@ -45,6 +46,9 @@
 #   8encoder.CH8
 #     VALUE : n/a
 #     BUTTON: n/a
+#
+# MIDI IN
+#   Recieve MIDI-IN data on Unit-MIDI and send the raw data to Unit-MIDI synthesizer.
 #
 # KEYBOARD PLAYER (8encoder slide switch OFF)
 #   8encoder.CH1
@@ -144,6 +148,7 @@ label_reverb_level = None
 label_chorus_level = None
 label_reverb_lvmidi = None
 label_chorus_lvmidi = None
+label_midi_in = None
 
 # I2C
 i2c0 = None
@@ -233,6 +238,10 @@ midi_volume_delta = 0
 midi_gmbank = 0
 #midi_gmbank = 127
 midi_transpose = 0
+
+# MIDI IN/OUT
+midi_uart = False
+midi_received = False
 
 
 # Initialize SD Card device
@@ -995,6 +1004,24 @@ def cardkb_0_pressed_event(kb):
     tone_on[kbd_tone_ch] = []
 
 
+# MIDI IN
+def midi_in():
+  global midi_uart, midi_received, label_midi_in
+
+  midi_rcv_bytes = midi_uart.any()
+  if midi_rcv_bytes > 0:
+    midi_in_data = midi_uart.read()
+    print('MIDI IN:', midi_in_data)
+    midi_uart.write(midi_in_data)
+    if midi_received == False:
+      label_midi_in.setVisible(True)
+      midi_received = True
+
+  elif midi_received == True:
+    label_midi_in.setVisible(False)
+    midi_received = False
+
+
 # Make the midi file catalog
 def midi_file_catalog():
   global label_midi_file, midi_file_selected
@@ -1014,6 +1041,7 @@ def midi_file_catalog():
       midi_files[i][2] = float(midi_files[i][2])
 
 
+# Read 8encoder values
 def encoder_read():
   global encoder8_0, enc_button_ch, enc_slide_switch, enc_parm, enc_parm_decade, enc_volume_decade, enc_mastervol_decade
   global tone_on, kbd_tone_ch, playing_midi, speed_factor, midi_file_selected, midi_files, midi_play_mode
@@ -1422,13 +1450,13 @@ def encoder_read():
         pass
 
 
-
 def setup():
   global title_midi, title_midi_params, title_keyboard, title_kbd_params, title_general
   global label_keycode, label_transp, label_channel, i2c0, cardkb_0, kbstr, sustain, label_parameter, label_midi_fnum, label_midi_tempo
   global label_file, label_midi_file, label_midi_transp, label_midi_volume, label_volume, label_program, kbd_gmbabnk, label_program_name, label_sustain, label_master_volume
   global label_reverb_level, label_chorus_level, label_reverb_lvmidi, label_chorus_lvmidi
   global enc_ch_val, enc_pmidi_labels, enc_pkbd_labels
+  global midi_uart, label_midi_in
 
   M5.begin()
   Widgets.fillScreen(0x222222)
@@ -1462,6 +1490,9 @@ def setup():
 
   label_program_name = Widgets.Label("label_program_name", 0, 160, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
 
+  # MIDI IN
+  label_midi_in = Widgets.Label("label_midi_in", 200, 100, 1.0, 0x00ffcc, 0x222222, Widgets.FONTS.DejaVu18)
+
   # Master Volume
   label_master_volume = Widgets.Label("label_master_volume", 0, 220, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
 
@@ -1485,6 +1516,8 @@ def setup():
   global synth_0
 #  synth_0 = SynthUnit(1, port=(13, 14))
   synth_0 = MIDIUnit(1, port=(13, 14))
+  midi_uart = synth_0._uart
+
   synth_0.set_instrument(kbd_gmbabnk, kbd_tone_ch, kbd_program)
   synth_0.set_master_volume(master_volume)
   for ch in range(len(tone_on)):
@@ -1492,19 +1525,22 @@ def setup():
     synth_0.set_chorus(ch, 0, 0, 0, 0)
 
   # Initialize GUI display
-  title_midi.setText(str('MIDI PLAYER'))
-  title_midi_params.setText(str('NO. TRN VOL TEMP REVB  CHOR'))
-  title_keyboard.setText(str('KEYBOARD PLAYER'))
-  title_kbd_params.setText(str('PRG TRN VOL S CH REVB  CHOR'))
-  title_general.setText(str('VOL KEYCD PRM'))
+  title_midi.setText('MIDI PLAYER')
+  title_midi_params.setText('NO. TRN VOL TEMP REVB  CHOR')
+  title_keyboard.setText('KEYBOARD PLAYER')
+  title_kbd_params.setText('PRG TRN VOL S CH REVB  CHOR')
+  title_general.setText('VOL KEYCD PRM')
+
+  label_midi_in.setText('M-IN')
+  label_midi_in.setVisible(False)
 
   label_keycode.setText(str('---'))
   label_parameter.setText(str('---'))
   set_synth_master_volume(0)
 
-  label_file.setText(str('FILE:'))
+  label_file.setText('FILE:')
   label_file.setVisible(True)
-  label_midi_file.setText(str('none'))
+  label_midi_file.setText('none')
   label_midi_file.setVisible(True)
   label_midi_fnum.setText('{:03d}'.format(0))
 
@@ -1539,6 +1575,7 @@ def setup():
 def loop():
   global label_keycode, i2c0, cardkb_0, kbstr
   M5.update()
+  midi_in()
   cardkb_0.tick()
   encoder_read()
 
