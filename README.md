@@ -15,7 +15,7 @@
 ---
 ### UIFlow/UnitMIDI_SMF_MIDIin.py
     CPU: M5Stack CORE2
-          PORT-A: 8encoder, (I2C)
+          PORT-A: 8encoder (I2C)
           PORT-C: Unit-MIDI (UART)
           Micro SD: MIDI Files(format0), GM program names list and MIDI channel settings.
     Unit-MIDI:
