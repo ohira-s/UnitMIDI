@@ -1,27 +1,27 @@
-Acostic Grand Piano.   
-Bright Acostic Piano.  
-Electric Grand Piano.  
-Honky-Tonk Piano.      
-Electric Piano 1.      
-Electric Piano 2.      
-Harpsicord.            
+Acostic Grand Piano    
+Bright Acostic Piano   
+Electric Grand Piano   
+Honky-Tonk Piano       
+Electric Piano 1       
+Electric Piano 2       
+Harpsicord             
 Clavi                  
 Celesta                
-Glockenspiel.          
+Glockenspiel           
 Music Box              
 Vibraphone             
 Marimba                
-Xylophone.             
-Tubular Bells.         
-Dulcimer.              
-Drawber Organ.         
-Percussive Organ.      
-Rock Organ.            
-Church Organ.          
-Reed Organ.            
+Xylophone              
+Tubular Bells          
+Dulcimer               
+Drawber Organ          
+Percussive Organ       
+Rock Organ             
+Church Organ           
+Reed Organ             
 Accordion              
-Harmonica.             
-Tango Accordion.       
+Harmonica              
+Tango Accordion        
 Acostic Guitar (nylon) 
 Acostic Guitar (steel) 
 Electric Guitar (jazz) 

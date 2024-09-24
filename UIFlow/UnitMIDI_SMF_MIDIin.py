@@ -26,69 +26,70 @@
 #====================================================================================================
 # Standard MIDI File PLAYER (8encoder slide switch ON)
 #   8encoder.CH1
-#     VALUE : Master volume.
-#     BUTTON: All notes off.
-#
-#   8encoder.CH2
 #     VALUE : Select a MIDI file. (never works in playing a MIDI file.)
 #     BUTTON: PLAY/STOP the MIDI file selected.z
 #
-#   8encoder.CH3
+#   8encoder.CH2
 #     VALUE : SMF player key transpose.  (All notes off in advance of the transpose.)
 #     BUTTON: PAUSE/RESTART the MIDI file playing.
 #
-#   8encoder.CH4
+#   8encoder.CH3
 #     VALUE : SMF player volume.
 #     BUTTON: Change value by decade or 1. (toggle)
 #
-#   8encoder.CH5
+#   8encoder.CH4
 #     VALUE : Change SMF player tempo to play.
 #     BUTTON: n/a
 #
-#   8encoder.CH6
+#   8encoder.CH5
 #     VALUE : Change the parameter to edit. (SMF player reverb or chrus)
 #     BUTTON: n/a
 #
-#   8encoder.CH7
+#   8encoder.CH6
 #     VALUE : Change the parameter designated by CH6.
 #     BUTTON: Change value by decade or 1. (toggle)
 #
-#   8encoder.CH8
+#   8encoder.CH7
 #     VALUE : n/a
 #     BUTTON: n/a
 #
-# MIDI-IN PLAYER (8encoder slide switch OFF)
-#   8encoder.CH1
+#   8encoder.CH8
 #     VALUE : Master volume.
 #     BUTTON: All notes off.
 #
+# MIDI-IN PLAYER (8encoder slide switch OFF)
+#   8encoder.CH1
+#     VALUE : Select a MIDI setting file.
+#     BUTTON: Change value by decade or 1. (toggle)
+#
 #   8encoder.CH2
+#     VALUE : Control the setting file. (LOAD/SAVE)
+#     BUTTON: Execute the controle selected without any confirmation.
+#
+#   8encoder.CH3
 #     VALUE : Change MIDI channel of MIDI-IN play.
 #     BUTTON: All notes off in the MIDI channel for MIDI-IN play.
 #
-#   8encoder.CH3
-#     VALUE : Select a program.
-#     BUTTON: n/a
-#
 #   8encoder.CH4
-#     VALUE : n/a
-#     BUTTON: n/a
-#
-#   8encoder.CH5
-#     VALUE : n/a
-#     BUTTON: n/a
-#
-#   8encoder.CH6
-#     VALUE : Change the parameter to edit. (MIDI-IN player reverb or chrus)
-#     BUTTON: n/a
-#
-#   8encoder.CH7
-#     VALUE : Change the parameter designated by CH6.
+#     VALUE : Select a program.
 #     BUTTON: Change value by decade or 1. (toggle)
 #
-#   8encoder.CH8
+#   8encoder.CH5
+#     VALUE : Change the parameter to edit. (MIDI-IN player reverb, chorus and vibrate)
+#     BUTTON: Change value by decade or 1. (toggle)
+#
+#   8encoder.CH6
+#     VALUE : Change the parameter designated by CH5.
+#     BUTTON: Change value by decade or 1. (toggle)
+#
+#   8encoder.CH7
 #     VALUE : n/a
 #     BUTTON: n/a
+#
+#   8encoder.CH8
+#     VALUE : Master volume.
+#     BUTTON: All notes off.
+#
 #####################################################################################################
 # SD card files and formats
 #====================================================================================================
@@ -103,9 +104,15 @@
 #                     Electric Grand Piano
 #                        :
 #                     Gun Shot
+#
+# Directory: /SYNTH/MIDIUNIT/
+# Files:
+#   MIDISETxxx.json: MIDI IN parameter settings in JSON format. (xxx is from 000 to 999)
+#   Default values are used if a file to load is not available.
 #####################################################################################################
 
 import os, sys, io
+import json
 import M5
 from M5 import *
 from unit import CardKBUnit
@@ -117,13 +124,16 @@ import time
 from hardware import sdcard
 import _thread
 
-# GUI
+## GUI
+
+# Tile labels
 title_smf = None
 title_smf_params = None
 title_midi_in = None
 title_midi_in_params = None
 title_general = None
 
+# SMF labels
 label_master_volume = None
 label_smf_file = None
 label_smf_fname = None
@@ -131,14 +141,18 @@ label_smf_fnum = None
 label_smf_transp = None
 label_smf_volume = None
 label_smf_tempo = None
+label_smf_parameter = None
+label_smf_parm_value = None
+
+# MIDI labels
+label_midi_in_set = None
+label_midi_in_set_ctrl = None
+label_midi_in = None
 label_channel = None
 label_program = None
 label_program_name = None
-label_reverb_level = None
-label_chorus_level = None
-label_smf_reverb_lv = None
-label_smf_chorus_lv = None
-label_midi_in = None
+label_midi_parameter = None
+label_midi_parm_value = None
 
 # I2C
 i2c0 = None
@@ -148,18 +162,35 @@ encoder8_0 = None
 enc_button_ch = [False]*8
 enc_slide_switch = None
 
-ENC_MASTER_VOLUME = 1
-EENC_SMF_MCH = 2
-ENC_TRANSPORSE_PROGRAM = 3
-ENC_VOLUME_na = 4
-ENC_TEMPO_na = 5
-ENC_PARAMETER = 6
-ENC_CTRL1 = 7
-ENC_CTRL2 = 8
+# Encoder number in slide switch on
+ENC_SMF_FILE       = 11     # Select SMF file
+ENC_SMF_TRANSPORSE = 12     # Set transpose for SMF player
+ENC_SMF_VOLUME     = 13     # Set volume for SMF player
+ENC_SMF_TEMPO      = 14     # Set tempo for SMF player
+ENC_SMF_PARAMETER  = 15     # Select parameter to edit
+ENC_SMF_CTRL       = 16     # Set parameter value
+ENC_SMF_EN_na1     = 17     # not available
+ENC_SMF_MASTER_VOL = 18     # Change master volume
 
-enc_parameters = ['P','L','F','P','L','F','D']
-enc_psmf_labels = [None]*7
-enc_pmin_labels  = [None]*7
+# Encoder number in slide switch off
+ENC_MIDI_SET        = 1      # Select MIDI setting file
+ENC_MIDI_FILE       = 2      # File operation (read/write)
+ENC_MIDI_CHANNEL    = 3      # Select MIDI channel to edit
+ENC_MIDI_PROGRAM    = 4      # Select program for MIDI channel
+ENC_MIDI_PARAMETER  = 5      # Select parameter to edit
+ENC_MIDI_CTRL       = 6      # Set parameter value
+ENC_MIDI_EN_na1     = 7      # not available
+ENC_MIDI_MASTER_VOL = 8      # Change master volume
+
+# MIDI setting file controls list
+enc_midi_set_ctrl_list = ['LOD', 'SAV']
+MIDI_SET_FILES_MAX = 1000
+MIDI_SET_FILE_LOAD = 0
+MIDI_SET_FILE_SAVE = 1
+enc_midi_set_ctrl  = MIDI_SET_FILE_LOAD
+
+# Parameter names list
+enc_parameters = ['RvPG','RvLV','RvFB','ChPG','ChLV','ChFB','ChDL','VbRT', 'VbDP', 'VbDL']
 PARM_RVB_PROG  = 0
 PARM_RVB_LEVEL = 1
 PARM_RVB_FBACK = 2
@@ -167,20 +198,25 @@ PARM_CHR_PROG  = 3
 PARM_CHR_LEVEL = 4
 PARM_CHR_FBACK = 5
 PARM_CHR_DELAY = 6
+PARM_VIB_RATE  = 7
+PARM_VIB_DEPTH = 8
+PARM_VIB_DELAY = 9
+
 enc_parm = PARM_RVB_PROG
 enc_parm_decade = False
 enc_volume_decade = False
 enc_mastervol_decade = False
+enc_midi_set_decade = False
+enc_midi_prg_decade = False
 
 # SYNTH Unit instance
 synth_0 = None
 
-# Parameter setting mode
-parameter_value = 0
-
 # MIDI-IN player
 midi_in_settings = []
 midi_in_ch = 0
+midi_in_file_path = '/sd//SYNTH/MIDIUNIT/'
+midi_in_set_num = 0
 
 # MIDI master volume
 master_volume = 127
@@ -198,8 +234,9 @@ smf_volume_delta = 0
 smf_gmbank = 0
 #smf_gmbank = 127
 smf_transpose = 0
-smf_reverb = [0,0,0]       # [program,level,feedback]
-smf_chorus = [0,0,0,0]     # [program,level,feedback,delay]
+smf_reverb = [0,0,0]        # [program,level,feedback]
+smf_chorus = [0,0,0,0]      # [program,level,feedback,delay]
+smf_vibrate = [0,0,0]       # [rate,depth,delay]
 
 # MIDI IN/OUT
 midi_uart = False
@@ -208,10 +245,9 @@ midi_received = False
 
 # Initialize SD Card device
 def sdcard_init():
-  global smf_file_path, mf
+  global mf
 
   print('SD CARD INIT.')
-  smf_file_path = '/sd//SYNTH/MIDIFILE/'
   mf = None
   sdcard.SDCard(slot=2, width=1, sck=18, miso=38, mosi=23, cs=4, freq=1000000)
   print('SD CARD INIT done.')
@@ -224,6 +260,54 @@ def encoder_init():
   encoder8_0 = Encoder8Unit(i2c0, 0x41)
   for enc_ch in range(1, 9):
     encoder8_0.set_counter_value(enc_ch, 0)
+
+
+# Write MIDI IN settings to SD card
+def write_midi_in_settings(num):
+  global midi_in_file_path, midi_in_settings
+
+  # Write MIDI IN settings as JSON file
+  fname = 'MIDISET{:0=3d}.json'.format(num)
+  try:
+    with open(midi_in_file_path + fname, 'w') as f:
+      json.dump(midi_in_settings, f)
+
+    f.close()
+  except Exception as e:
+    print('MIDI IN FILE WRITE ERROR:', e)
+
+
+# Read MIDI IN settings from SD card
+def read_midi_in_settings(num):
+  global midi_in_file_path
+
+  # Read MIDI IN settings JSON file
+  rdjson = None
+  fpath = midi_in_file_path + 'MIDISET{:0=3d}.json'.format(num)
+  try:
+    with open(fpath, 'r') as f:
+      rdjson = json.load(f)
+
+    # Default values
+    for ch in range(16):
+      kys = rdjson[ch]
+      if not 'program' in kys:
+        rdjson[ch]['program'] = 0
+      if not 'gmbank' in kys:
+        rdjson[ch]['gmbank'] = 0
+      if not 'reverb' in kys:
+        rdjson[ch]['reverb'] = [0,0,0]
+      if not 'chorus' in kys:
+        rdjson[ch]['chorus'] = [0,0,0,0]
+      if not 'vibrate' in kys:
+        rdjson[ch]['vibrate'] = [0,0,0]
+
+    f.close()
+
+  except Exception as e:
+    print('MIDI IN FILE READ ERROR:', e)
+  
+  return rdjson
 
 
 # MIDI: Get a delta time in integer
@@ -652,6 +736,12 @@ def control_chorus(ch, prog, level, fback, delay):
   synth_0.set_chorus(ch, prog, level, fback, delay)
 
 
+# Vibrate
+def control_vibrate(ch, rate, depth, delay):
+  global synth_0
+  synth_0.set_vibrate(ch, rate, depth, delay)
+
+
 # Get GM prgram name
 def get_gm_program_name(gmbabnk, program):
   with open(smf_file_path + 'GM0.TXT') as f:
@@ -692,6 +782,7 @@ def send_midi_in_settings(ch):
   synth_0.set_instrument(midi_in_settings[ch]['gmbank'], ch, midi_in_settings[ch]['program'])
   control_reverb(midi_in_ch, midi_in_settings[ch]['reverb'][0], midi_in_settings[ch]['reverb'][1], midi_in_settings[ch]['reverb'][2])
   control_chorus(ch, midi_in_settings[ch]['chorus'][0], midi_in_settings[ch]['chorus'][1], midi_in_settings[ch]['chorus'][2], midi_in_settings[ch]['chorus'][3])
+  control_vibrate(ch, midi_in_settings[ch]['vibrate'][0], midi_in_settings[ch]['vibrate'][1], midi_in_settings[ch]['vibrate'][2])
 
 
 # Send all MIDI channel settings
@@ -703,10 +794,10 @@ def send_all_midi_in_settings():
 # Set and show channel for MIDI-IN player
 def set_midi_in_channel(dlt):
   global midi_in_ch, label_channel
-  global midi_in_settings, enc_psmf_labels, enc_parm
+  global midi_in_settings, enc_parm
 
   midi_in_ch = (midi_in_ch + dlt) % 16
-  label_channel.setText('{:0>2d}'.format(midi_in_ch))
+  label_channel.setText('{:0>2d}'.format(midi_in_ch + 1))
 
   set_midi_in_program(0)
 
@@ -718,10 +809,8 @@ def set_midi_in_channel(dlt):
 
   # Reset the parameter to edit
   enc_parm = PARM_RVB_PROG
-  label_reverb_level.setText('P{:03d}'.format(midi_in_settings[midi_in_ch]['reverb'][0]))
-  label_chorus_level.setText('P{:03d}'.format(midi_in_settings[midi_in_ch]['chorus'][0]))
-  label_reverb_level.setColor(0x00ffcc, 0x222222)
-  label_chorus_level.setColor(0xffffff, 0x222222)
+  label_midi_parameter.setText(enc_parameters[0])
+  label_midi_parm_value.setText('{:03d}'.format(midi_in_settings[midi_in_ch]['reverb'][0]))
 
 
 # Set and show program for MIDI-IN player
@@ -776,7 +865,7 @@ def set_midi_in_reverb(prog=None, level=None, fback=None):
 
 # Set reverb for SMF player
 def set_smf_reverb(prog=None, level=None, fback=None):
-  global label_smf_reverb_lv, smf_reverb, midi_in_ch
+  global label_smf_parameter, smf_reverb, midi_in_ch
 
   disp = None
   if not prog is None:
@@ -826,7 +915,7 @@ def set_midi_in_chorus(prog=None, level=None, fback=None, delay=None):
 
 # Set chorus for SMF player
 def set_smf_chorus(prog=None, level=None, fback=None, delay=None):
-  global label_smf_chorus_lv, smf_chorus, midi_in_ch
+  global label_smf_parm_value, smf_chorus, midi_in_ch
 
   send = False
   if not prog is None:
@@ -849,6 +938,52 @@ def set_smf_chorus(prog=None, level=None, fback=None, delay=None):
     for ch in range(16):
       if ch != midi_in_ch:
         control_chorus(ch, smf_chorus[0], smf_chorus[1], smf_chorus[2], smf_chorus[3])
+
+
+# Set vibrate for MIDI-IN player
+def set_midi_in_vibrate(rate=None, depth=None, delay=None):
+  global midi_in_ch
+  global midi_in_settings
+
+  send = False
+  if not rate is None:
+    midi_in_settings[midi_in_ch]['vibrate'][0] = rate
+    send = True
+
+  if not depth is None:
+    midi_in_settings[midi_in_ch]['vibrate'][1] = depth
+    send = True
+    
+  if not delay is None:
+    midi_in_settings[midi_in_ch]['vibrate'][2] = delay
+    send = True
+
+  midi_in_vibrate = midi_in_settings[midi_in_ch]['vibrate']
+  if send:
+    control_vibrate(midi_in_ch, midi_in_vibrate[0], midi_in_vibrate[1], midi_in_vibrate[2])
+
+
+# Set vibrate for SMF player
+def set_smf_vibrate(rate=None, depth=None, delay=None):
+  global label_smf_parm_value, smf_vibrate, midi_in_ch
+
+  send = False
+  if not rate is None:
+    smf_vibrate[0] = rate
+    send = True
+
+  if not depth is None:
+    smf_vibrate[1] = depth
+    send = True
+    
+  if not delay is None:
+    smf_vibrate[2] = delay
+    send = True
+
+  if send:
+    for ch in range(16):
+      if ch != midi_in_ch:
+        control_vibrate(ch, smf_vibrate[0], smf_vibrate[1], smf_vibrate[2])
 
 
 # MIDI IN
@@ -892,7 +1027,7 @@ def midi_file_catalog():
 def encoder_read():
   global encoder8_0, enc_button_ch, enc_slide_switch, enc_parm, enc_parm_decade, enc_volume_decade, enc_mastervol_decade
   global midi_in_ch, playing_smf, smf_speed_factor, smf_file_selected, smf_files, smf_play_mode
-  global midi_in_settings
+  global midi_in_settings, midi_in_set_num, enc_midi_set_ctrl, enc_midi_set_decade, enc_midi_prg_decade
 
   # Slide switch
   slide_switch_change = False
@@ -910,6 +1045,7 @@ def encoder_read():
 
   # Scan encoders
   for enc_ch in range(1,9):
+    enc_menu = enc_ch + (10 if enc_slide_switch else 0)
     enc_count = encoder8_0.get_counter_value(enc_ch)
     enc_button = not encoder8_0.get_button_status(enc_ch)
 
@@ -937,37 +1073,29 @@ def encoder_read():
     if delta != 0:
       encoder8_0.set_counter_value(enc_ch, 0)
 
-    # Master volume
-    if   enc_ch == ENC_MASTER_VOLUME:
+    ## PRE-PROCESS: Parameter encoder
+    if enc_menu == ENC_SMF_PARAMETER or enc_menu == ENC_MIDI_PARAMETER:
+      if delta != 0 or slide_switch_change:
+        # Change the target parameter to edit with CTRL1
+        parms = len(enc_parameters)
+        enc_parm = enc_parm + delta
+        if enc_parm < 0:
+          enc_parm = parms -1
+        elif enc_parm >= parms:
+          enc_parm = 0
+
+    ## PRE-PROCESS: Parameter control encoder
+    if enc_menu == ENC_SMF_CTRL or enc_menu == ENC_MIDI_CTRL:
       # Decade value button (toggle)
       if enc_button and enc_button_ch[enc_ch-1]:
-        enc_mastervol_decade = not enc_mastervol_decade
+        enc_parm_decade = not enc_parm_decade
 
-      if enc_mastervol_decade:
+      if enc_parm_decade:
         encoder8_0.set_led_rgb(enc_ch, 0xffa000)
 
-      # Change master volume
-      if delta != 0: 
-          set_synth_master_volume(delta * (10 if enc_mastervol_decade else 1))
-
-      # All notes off
-      if enc_button:
-        all_notes_off()
-
-    # SMF file / MIDI channel
-    elif enc_ch == EENC_SMF_MCH:
-      # Slide switch off: midi-in mode
-      if slide_switch == False:
-        # Select MIDI channel to MIDI-IN play
-        if delta != 0:
-          set_midi_in_channel(delta)
-
-        # All notes off of MIDI-IN player channel
-        if enc_button == True:
-          all_notes_off(midi_in_ch)
-
-      # Slide switch on: SMF player mode
-      else:
+    ## MENU PROCESS
+    # Select SMF file
+    if enc_menu == ENC_SMF_FILE:
         # Select a MIDI file
         if playing_smf == False:
           if smf_file_selected >= 0:
@@ -995,39 +1123,27 @@ def encoder_read():
               smf_speed_factor = smf_files[smf_file_selected][2]
               label_smf_tempo.setText('x{:3.1f}'.format(smf_speed_factor))
               _thread.start_new_thread(play_midi, (smf_files[smf_file_selected][1],))
+      
+    # Set transpose for SMF player
+    elif enc_menu == ENC_SMF_TRANSPORSE:
+      if delta != 0:
+        all_notes_off()
+        set_smf_transpose(delta)
 
-    # Transpose / Program
-    elif enc_ch == ENC_TRANSPORSE_PROGRAM:
-      # Slide switch off: midi-in mode
-      if slide_switch == False:
-        # Select program
-        if delta != 0:
-          set_midi_in_program(delta)
-
-        # All notes off of MIDI-IN player channel
-        if enc_button == True:
-          all_notes_off(midi_in_ch)
-
-      # Slide switch on: SMF player mode
-      else:
-        if delta != 0:
-          all_notes_off()
-          set_smf_transpose(delta)
-
-        # Pause/Restart SMF player in playing
-        if enc_button == True:
-          if playing_smf == True:
-            if smf_play_mode == 'PLAY':
-              print('PAUSE MIDI PLAYER')
-              smf_play_mode = 'PAUSE'
-            else:
-              print('CONTINUE MIDI PLAYER')
-              smf_play_mode = 'PLAY'
+      # Pause/Restart SMF player in playing
+      if enc_button == True:
+        if playing_smf == True:
+          if smf_play_mode == 'PLAY':
+            print('PAUSE MIDI PLAYER')
+            smf_play_mode = 'PAUSE'
           else:
-            print('MIDI PLAYER NOT PLAYING')
+            print('CONTINUE MIDI PLAYER')
+            smf_play_mode = 'PLAY'
+        else:
+          print('MIDI PLAYER NOT PLAYING')
 
-    # MIDI Channel volume / Button to pause or Restart SMF player, to all notes off of MIDI-IN play
-    elif enc_ch == ENC_VOLUME_na:
+    # Set volume for SMF player
+    elif enc_menu == ENC_SMF_VOLUME:
       # Decade value button (toggle)
       if enc_button and enc_button_ch[enc_ch-1]:
         enc_volume_decade = not enc_volume_decade
@@ -1044,261 +1160,385 @@ def encoder_read():
         if delta != 0:
           set_smf_volume_delta(delta * (10 if enc_volume_decade else 1))
 
-    # SMF player tempo / MIDI-IN play MIDI channel
-    elif enc_ch == ENC_TEMPO_na:
-      # Slide switch off: midi-in mode
-      if slide_switch == False:
-        pass
+    # Set tempo for SMF player
+    elif enc_menu == ENC_SMF_TEMPO:
+      # Change MIDI play speed
+      if delta == -1:
+        smf_speed_factor = smf_speed_factor - 0.1
+        if smf_speed_factor < 0.1:
+          smf_speed_factor = 0.1
+      elif delta == 1:
+        smf_speed_factor = smf_speed_factor + 0.1
+        if smf_speed_factor > 5:
+          smf_speed_factor = 5
 
-      # Slide switch on: SMF player mode
-      else:
-        # Change MIDI play speed
-        if delta == -1:
-          smf_speed_factor = smf_speed_factor - 0.1
-          if smf_speed_factor < 0.1:
-            smf_speed_factor = 0.1
-        elif delta == 1:
-          smf_speed_factor = smf_speed_factor + 0.1
-          if smf_speed_factor > 5:
-            smf_speed_factor = 5
+      if delta != 0:
+        label_smf_tempo.setText('x{:3.1f}'.format(smf_speed_factor))
 
-        if delta != 0:
-          label_smf_tempo.setText('x{:3.1f}'.format(smf_speed_factor))
-
-    # Select a parameter
-    elif enc_ch == ENC_PARAMETER:
+    # Select parameter to edit
+    elif enc_menu == ENC_SMF_PARAMETER:
       if delta != 0 or slide_switch_change:
-        # Change the target parameter to edit with CTRL1
-        parms = len(enc_parameters)
-        enc_parm = enc_parm + delta
-        if enc_parm < 0:
-          enc_parm = parms -1
-        elif enc_parm >= parms:
-          enc_parm = 0
+        # Display the label
+        if   enc_parm == PARM_RVB_PROG:
+          disp = smf_reverb[0]
+        elif enc_parm == PARM_RVB_LEVEL:
+          disp = smf_reverb[1]
+        elif enc_parm == PARM_RVB_FBACK:
+          disp = smf_reverb[2]
+        elif enc_parm == PARM_CHR_PROG:
+          disp = smf_chorus[0]
+        elif enc_parm == PARM_CHR_LEVEL:
+          disp = smf_chorus[1]
+        elif enc_parm == PARM_CHR_FBACK:
+          disp = smf_chorus[2]
+        elif enc_parm == PARM_CHR_DELAY:
+          disp = smf_chorus[3]
+        elif enc_parm == PARM_VIB_RATE:
+          disp = smf_vibrate[0]
+        elif enc_parm == PARM_VIB_DEPTH:
+          disp = smf_vibrate[1]
+        elif enc_parm == PARM_VIB_DELAY:
+          disp = smf_vibrate[1]
 
-        # Make the color of the parameter labels in default color
-        for p in range(parms):
-          enc_pmin_labels[p].setColor(0xffffff, 0x222222)
-          enc_psmf_labels[p].setColor(0xffffff, 0x222222)
+        label_smf_parameter.setText(enc_parameters[enc_parm])
+        label_smf_parm_value.setText('{:03d}'.format(disp))
 
-        # Slide switch off: midi-in mode
-        if slide_switch == False:
-          # Display the label
-          if   enc_parm == PARM_RVB_PROG:
-            disp = midi_in_settings[midi_in_ch]['reverb'][0]
-          elif enc_parm == PARM_RVB_LEVEL:
-            disp = midi_in_settings[midi_in_ch]['reverb'][1]
-          elif enc_parm == PARM_RVB_FBACK:
-            disp = midi_in_settings[midi_in_ch]['reverb'][2]
-          elif enc_parm == PARM_CHR_PROG:
-            disp = midi_in_settings[midi_in_ch]['chorus'][0]
-          elif enc_parm == PARM_CHR_LEVEL:
-            disp = midi_in_settings[midi_in_ch]['chorus'][1]
-          elif enc_parm == PARM_CHR_FBACK:
-            disp = midi_in_settings[midi_in_ch]['chorus'][2]
-          elif enc_parm == PARM_CHR_DELAY:
-            disp = midi_in_settings[midi_in_ch]['chorus'][3]
-
-          enc_pmin_labels[enc_parm].setColor(0x00ffcc, 0x222222)
-          enc_pmin_labels[enc_parm].setText(enc_parameters[enc_parm] + '{:03d}'.format(disp))
-
-        # Slide switch on: SMF player mode
-        else:
-          # Display the label
-          if   enc_parm == PARM_RVB_PROG:
-            disp = smf_reverb[0]
-          elif enc_parm == PARM_RVB_LEVEL:
-            disp = smf_reverb[1]
-          elif enc_parm == PARM_RVB_FBACK:
-            disp = smf_reverb[2]
-          elif enc_parm == PARM_CHR_PROG:
-            disp = smf_chorus[0]
-          elif enc_parm == PARM_CHR_LEVEL:
-            disp = smf_chorus[1]
-          elif enc_parm == PARM_CHR_FBACK:
-            disp = smf_chorus[2]
-          elif enc_parm == PARM_CHR_DELAY:
-            disp = smf_chorus[3]
-
-          enc_psmf_labels[enc_parm].setColor(0x00ffcc, 0x222222)
-          enc_psmf_labels[enc_parm].setText(enc_parameters[enc_parm] + '{:03d}'.format(disp))
-
-    # Parameter-CTRL1
-    elif enc_ch == ENC_CTRL1:
-      # Decade value button (toggle)
-      if enc_button and enc_button_ch[enc_ch-1]:
-        enc_parm_decade = not enc_parm_decade
-
-      if enc_parm_decade:
-        encoder8_0.set_led_rgb(enc_ch, 0xffa000)
-
+    # Set parameter value
+    elif enc_menu == ENC_SMF_CTRL:
       if delta != 0 or slide_switch_change:
         send_to = 0
 
-        # Slide switch off: midi-in mode
-        if slide_switch == False:
-          if   enc_parm == PARM_RVB_PROG:
-            midi_in_settings[midi_in_ch]['reverb'][0] = midi_in_settings[midi_in_ch]['reverb'][0] + delta
-            if midi_in_settings[midi_in_ch]['reverb'][0] < 0:
-              midi_in_settings[midi_in_ch]['reverb'][0] = 7
-            elif midi_in_settings[midi_in_ch]['reverb'][0] > 7:
-              midi_in_settings[midi_in_ch]['reverb'][0] = 0
-            disp = midi_in_settings[midi_in_ch]['reverb'][0]
-            send_to = 1
+        if   enc_parm == PARM_RVB_PROG:
+          smf_reverb[0] = smf_reverb[0] + delta
+          if smf_reverb[0] < 0:
+            smf_reverb[0] = 7
+          elif smf_reverb[0] > 7:
+            smf_reverb[0] = 0
+          disp = smf_reverb[0]
+          send_to = 1
 
-          elif enc_parm == PARM_RVB_LEVEL:
-            midi_in_settings[midi_in_ch]['reverb'][1] = midi_in_settings[midi_in_ch]['reverb'][1] + delta * (10 if enc_parm_decade else 1)
-            if midi_in_settings[midi_in_ch]['reverb'][1] < 0:
-              midi_in_settings[midi_in_ch]['reverb'][1] = 0
-            elif midi_in_settings[midi_in_ch]['reverb'][1] > 255:
-              midi_in_settings[midi_in_ch]['reverb'][1] = 255
-            disp = midi_in_settings[midi_in_ch]['reverb'][1]
-            send_to = 1
+        elif enc_parm == PARM_RVB_LEVEL:
+          smf_reverb[1] = smf_reverb[1] + delta * (10 if enc_parm_decade else 1)
+          disp = smf_reverb[1]
 
-          elif enc_parm == PARM_RVB_FBACK:
-            midi_in_settings[midi_in_ch]['reverb'][2] = midi_in_settings[midi_in_ch]['reverb'][2] + delta * (10 if enc_parm_decade else 1)
-            if midi_in_settings[midi_in_ch]['reverb'][2] < 0:
-              midi_in_settings[midi_in_ch]['reverb'][2] = 0
-            elif midi_in_settings[midi_in_ch]['reverb'][2] > 255:
-              midi_in_settings[midi_in_ch]['reverb'][2] = 255
-            disp = midi_in_settings[midi_in_ch]['reverb'][2]
-            send_to = 1
+        elif enc_parm == PARM_RVB_FBACK:
+          smf_reverb[2] = smf_reverb[2] + delta * (10 if enc_parm_decade else 1)
+          if smf_reverb[2] < 0:
+            smf_reverb[2] = 0
+          elif smf_reverb[2] > 255:
+            smf_reverb[2] = 255
+          disp = smf_reverb[2]
+          send_to = 1
 
-          elif enc_parm == PARM_CHR_PROG:
-            midi_in_settings[midi_in_ch]['chorus'][0] = midi_in_settings[midi_in_ch]['chorus'][0] + delta
-            if midi_in_settings[midi_in_ch]['chorus'][0] < 0:
-              midi_in_settings[midi_in_ch]['chorus'][0] = 7
-            elif midi_in_settings[midi_in_ch]['chorus'][0] > 7:
-              midi_in_settings[midi_in_ch]['chorus'][0] = 0
-            disp = midi_in_settings[midi_in_ch]['chorus'][0]
-            send_to = 2
+        elif enc_parm == PARM_CHR_PROG:
+          smf_chorus[0] = smf_chorus[0] + delta
+          if smf_chorus[0] < 0:
+            smf_chorus[0] = 7
+          elif smf_chorus[0] > 7:
+            smf_chorus[0] = 0
+          disp = smf_chorus[0]
+          send_to = 2
 
-          elif enc_parm == PARM_CHR_LEVEL:
-            midi_in_settings[midi_in_ch]['chorus'][1] = midi_in_settings[midi_in_ch]['chorus'][1] + delta * (10 if enc_parm_decade else 1)
-            if midi_in_settings[midi_in_ch]['chorus'][1] < 0:
-              midi_in_settings[midi_in_ch]['chorus'][1] = 0
-            elif midi_in_settings[midi_in_ch]['chorus'][1] > 255:
-              midi_in_settings[midi_in_ch]['chorus'][1] = 255
-            disp = midi_in_settings[midi_in_ch]['chorus'][1]
-            send_to = 2
+        elif enc_parm == PARM_CHR_LEVEL:
+          smf_chorus[1] = smf_chorus[1] + delta * (10 if enc_parm_decade else 1)
+          if smf_chorus[1] < 0:
+            smf_chorus[1] = 0
+          elif smf_chorus[1] > 255:
+            smf_chorus[1] = 255
+          disp = smf_chorus[1]
+          send_to = 2
 
-          elif enc_parm == PARM_CHR_FBACK:
-            midi_in_settings[midi_in_ch]['chorus'][2] = midi_in_settings[midi_in_ch]['chorus'][2] + delta * (10 if enc_parm_decade else 1)
-            if midi_in_settings[midi_in_ch]['chorus'][2] < 0:
-              midi_in_settings[midi_in_ch]['chorus'][2] = 0
-            elif midi_in_settings[midi_in_ch]['chorus'][2] > 255:
-              midi_in_settings[midi_in_ch]['chorus'][2] = 255
-            disp = midi_in_settings[midi_in_ch]['chorus'][2]
-            send_to = 2
+        elif enc_parm == PARM_CHR_FBACK:
+          smf_chorus[2] = smf_chorus[2] + delta * (10 if enc_parm_decade else 1)
+          if smf_chorus[2] < 0:
+            smf_chorus[2] = 0
+          elif smf_chorus[2] > 255:
+            smf_chorus[2] = 255
+          disp = smf_chorus[2]
+          send_to = 2
 
-          elif enc_parm == PARM_CHR_DELAY:
-            midi_in_settings[midi_in_ch]['chorus'][3] = midi_in_settings[midi_in_ch]['chorus'][3] + delta * (10 if enc_parm_decade else 1)
-            if midi_in_settings[midi_in_ch]['chorus'][3] < 0:
-              midi_in_settings[midi_in_ch]['chorus'][3] = 0
-            elif midi_in_settings[midi_in_ch]['chorus'][3] > 255:
-              midi_in_settings[midi_in_ch]['chorus'][3] = 255
-            disp = midi_in_settings[midi_in_ch]['chorus'][3]
-            send_to = 2
+        elif enc_parm == PARM_CHR_DELAY:
+          smf_chorus[3] = smf_chorus[3] + delta * (10 if enc_parm_decade else 1)
+          if smf_chorus[3] < 0:
+            smf_chorus[3] = 0
+          elif smf_chorus[3] > 255:
+            smf_chorus[3] = 255
+          disp = smf_chorus[3]
+          send_to = 2
 
-          # Display the label
-          enc_pmin_labels[enc_parm].setText(enc_parameters[enc_parm] + '{:03d}'.format(disp))
+        elif enc_parm == PARM_VIB_RATE:
+          smf_vibrate[0] = smf_vibrate[0] + delta * (10 if enc_parm_decade else 1)
+          if smf_vibrate[0] < 0:
+            smf_vibrate[0] = 0
+          elif smf_vibrate[0] > 127:
+            smf_vibrate[0] = 127
+          disp = smf_vibrate[0]
+          send_to = 3
 
-          # Send MIDI message
-          if delta != 0:
-            if send_to == 1:
-              set_midi_in_reverb(midi_in_settings[midi_in_ch]['reverb'][0], midi_in_settings[midi_in_ch]['reverb'][1], midi_in_settings[midi_in_ch]['reverb'][2])
-            elif send_to == 2:
-              set_midi_in_chorus(midi_in_settings[midi_in_ch]['chorus'][0], midi_in_settings[midi_in_ch]['chorus'][1], midi_in_settings[midi_in_ch]['chorus'][2], midi_in_settings[midi_in_ch]['chorus'][3])
+        elif enc_parm == PARM_VIB_DEPTH:
+          smf_vibrate[1] = smf_vibrate[1] + delta * (10 if enc_parm_decade else 1)
+          if smf_vibrate[1] < 0:
+            smf_vibrate[1] = 0
+          elif smf_vibrate[1] > 127:
+            smf_vibrate[1] = 127
+          disp = smf_vibrate[1]
+          send_to = 3
 
-        # Slide switch on: SMF player mode
-        else:
-          if   enc_parm == PARM_RVB_PROG:
-            smf_reverb[0] = smf_reverb[0] + delta
-            if smf_reverb[0] < 0:
-              smf_reverb[0] = 7
-            elif smf_reverb[0] > 7:
-              smf_reverb[0] = 0
-            disp = smf_reverb[0]
-            send_to = 1
+        elif enc_parm == PARM_VIB_DELAY:
+          smf_vibrate[2] = smf_vibrate[2] + delta * (10 if enc_parm_decade else 1)
+          if smf_vibrate[2] < 0:
+            smf_vibrate[2] = 0
+          elif smf_vibrate[2] > 127:
+            smf_vibrate[2] = 127
+          disp = smf_vibrate[2]
+          send_to = 3
 
-          elif enc_parm == PARM_RVB_LEVEL:
-            smf_reverb[1] = smf_reverb[1] + delta * (10 if enc_parm_decade else 1)
-            disp = smf_reverb[1]
+        # Display the label
+        label_smf_parm_value.setText('{:03d}'.format(disp))
 
-          elif enc_parm == PARM_RVB_FBACK:
-            smf_reverb[2] = smf_reverb[2] + delta * (10 if enc_parm_decade else 1)
-            if smf_reverb[2] < 0:
-              smf_reverb[2] = 0
-            elif smf_reverb[2] > 255:
-              smf_reverb[2] = 255
-            disp = smf_reverb[2]
-            send_to = 1
+        # Send MIDI message
+        if delta != 0:
+          if send_to == 1:
+            set_smf_reverb(smf_reverb[0], smf_reverb[1], smf_reverb[2])
+          elif send_to == 2:
+            set_smf_chorus(smf_chorus[0], smf_chorus[1], smf_chorus[2], smf_chorus[3])
+          elif send_to == 3:
+            set_smf_vibrate(smf_vibrate[0], smf_vibrate[1], smf_vibrate[2])
 
-          elif enc_parm == PARM_CHR_PROG:
-            smf_chorus[0] = smf_chorus[0] + delta
-            if smf_chorus[0] < 0:
-              smf_chorus[0] = 7
-            elif smf_chorus[0] > 7:
-              smf_chorus[0] = 0
-            disp = smf_chorus[0]
-            send_to = 2
+    # Select MIDI setting file
+    elif enc_menu == ENC_MIDI_SET:
+      # Decade value button (toggle)
+      if enc_button and enc_button_ch[enc_ch-1]:
+        enc_midi_set_decade = not enc_midi_set_decade
 
-          elif enc_parm == PARM_CHR_LEVEL:
-            smf_chorus[1] = smf_chorus[1] + delta * (10 if enc_parm_decade else 1)
-            if smf_chorus[1] < 0:
-              smf_chorus[1] = 0
-            elif smf_chorus[1] > 255:
-              smf_chorus[1] = 255
-            disp = smf_chorus[1]
-            send_to = 2
+      if enc_midi_set_decade:
+        encoder8_0.set_led_rgb(enc_ch, 0xffa000)
 
-          elif enc_parm == PARM_CHR_FBACK:
-            smf_chorus[2] = smf_chorus[2] + delta * (10 if enc_parm_decade else 1)
-            if smf_chorus[2] < 0:
-              smf_chorus[2] = 0
-            elif smf_chorus[2] > 255:
-              smf_chorus[2] = 255
-            disp = smf_chorus[2]
-            send_to = 2
+      # File number
+      if delta != 0:
+        midi_in_set_num = (midi_in_set_num + delta * (10 if enc_midi_set_decade else 1)) % MIDI_SET_FILES_MAX
+        label_midi_in_set.setText('{:03d}'.format(midi_in_set_num))
 
-          elif enc_parm == PARM_CHR_DELAY:
-            smf_chorus[3] = smf_chorus[3] + delta * (10 if enc_parm_decade else 1)
-            if smf_chorus[3] < 0:
-              smf_chorus[3] = 0
-            elif smf_chorus[3] > 255:
-              smf_chorus[3] = 255
-            disp = smf_chorus[3]
-            send_to = 2
+    # File operation (read/write)
+    elif enc_menu == ENC_MIDI_FILE:
+      # File control
+      if delta != 0:
+        enc_midi_set_ctrl = (enc_midi_set_ctrl + delta) % 2
+        label_midi_in_set_ctrl.setText(enc_midi_set_ctrl_list[enc_midi_set_ctrl])
 
-          # Display the label
-          enc_psmf_labels[enc_parm].setText(enc_parameters[enc_parm] + '{:03d}'.format(disp))
+      # File operation button
+      if enc_button and enc_button_ch[enc_ch-1]:
+        # Load a MIDI settings file
+        if enc_midi_set_ctrl == MIDI_SET_FILE_LOAD:
+          midi_in_set = read_midi_in_settings(midi_in_set_num)
+          if not midi_in_set is None:
+            print('LOAD MIDI IN SET:', midi_in_set)
+            midi_in_settings = midi_in_set
+            set_midi_in_channel(0)
+            set_midi_in_program(0)
+            set_midi_in_reverb()
+            set_midi_in_chorus()
+            set_midi_in_vibrate()
+          else:
+            print('MIDI IN SET: NO FILE')
 
-          # Send MIDI message
-          if delta != 0:
-            if send_to == 1:
-              set_smf_reverb(smf_reverb[0], smf_reverb[1], smf_reverb[2])
-            elif send_to == 2:
-              set_smf_chorus(smf_chorus[0], smf_chorus[1], smf_chorus[2], smf_chorus[3])
+        # Save MIDI settings file
+        elif enc_midi_set_ctrl == MIDI_SET_FILE_SAVE:
+          write_midi_in_settings(midi_in_set_num)
+          print('SAVE MIDI IN SET:', midi_in_set_num, midi_in_settings)
 
-    # Parameter-CTRL2
-    elif enc_ch == ENC_CTRL2:
-      # Slide switch off: midi-in mode
-      if slide_switch == False:
-        pass
+    # Select MIDI channel to edit
+    elif enc_menu == ENC_MIDI_CHANNEL:
+      # Select MIDI channel to MIDI-IN play
+      if delta != 0:
+        set_midi_in_channel(delta)
 
-      # Slide switch on: SMF player mode
-      else:
-        pass
+      # All notes off of MIDI-IN player channel
+      if enc_button == True:
+        all_notes_off(midi_in_ch)
+
+    # Select program for MIDI channel
+    elif enc_menu == ENC_MIDI_PROGRAM:
+      # Decade value button (toggle)
+      if enc_button and enc_button_ch[enc_ch-1]:
+        enc_midi_prg_decade = not enc_midi_prg_decade
+
+      if enc_midi_prg_decade:
+        encoder8_0.set_led_rgb(enc_ch, 0xffa000)
+
+      # Select program
+      if delta != 0:
+        set_midi_in_program(delta * (10 if enc_midi_prg_decade else 1))
+
+      # All notes off of MIDI-IN player channel
+      if enc_button == True:
+        all_notes_off(midi_in_ch)
+
+    # Select parameter to edit
+    elif enc_menu == ENC_MIDI_PARAMETER:
+      if delta != 0 or slide_switch_change:
+        # Display the label
+        if   enc_parm == PARM_RVB_PROG:
+          disp = midi_in_settings[midi_in_ch]['reverb'][0]
+        elif enc_parm == PARM_RVB_LEVEL:
+          disp = midi_in_settings[midi_in_ch]['reverb'][1]
+        elif enc_parm == PARM_RVB_FBACK:
+          disp = midi_in_settings[midi_in_ch]['reverb'][2]
+        elif enc_parm == PARM_CHR_PROG:
+          disp = midi_in_settings[midi_in_ch]['chorus'][0]
+        elif enc_parm == PARM_CHR_LEVEL:
+          disp = midi_in_settings[midi_in_ch]['chorus'][1]
+        elif enc_parm == PARM_CHR_FBACK:
+          disp = midi_in_settings[midi_in_ch]['chorus'][2]
+        elif enc_parm == PARM_CHR_DELAY:
+          disp = midi_in_settings[midi_in_ch]['chorus'][3]
+        elif enc_parm == PARM_VIB_RATE:
+          disp = midi_in_settings[midi_in_ch]['vibrate'][0]
+        elif enc_parm == PARM_VIB_DEPTH:
+          disp = midi_in_settings[midi_in_ch]['vibrate'][1]
+        elif enc_parm == PARM_VIB_DELAY:
+          disp = midi_in_settings[midi_in_ch]['vibrate'][2]
+
+        label_midi_parameter.setText(enc_parameters[enc_parm])
+        label_midi_parm_value.setText('{:03d}'.format(disp))
+
+    # Set parameter value
+    elif enc_menu == ENC_MIDI_CTRL:
+      if delta != 0 or slide_switch_change:
+        send_to = 0
+
+        if   enc_parm == PARM_RVB_PROG:
+          midi_in_settings[midi_in_ch]['reverb'][0] = midi_in_settings[midi_in_ch]['reverb'][0] + delta
+          if midi_in_settings[midi_in_ch]['reverb'][0] < 0:
+            midi_in_settings[midi_in_ch]['reverb'][0] = 7
+          elif midi_in_settings[midi_in_ch]['reverb'][0] > 7:
+            midi_in_settings[midi_in_ch]['reverb'][0] = 0
+          disp = midi_in_settings[midi_in_ch]['reverb'][0]
+          send_to = 1
+
+        elif enc_parm == PARM_RVB_LEVEL:
+          midi_in_settings[midi_in_ch]['reverb'][1] = midi_in_settings[midi_in_ch]['reverb'][1] + delta * (10 if enc_parm_decade else 1)
+          if midi_in_settings[midi_in_ch]['reverb'][1] < 0:
+            midi_in_settings[midi_in_ch]['reverb'][1] = 0
+          elif midi_in_settings[midi_in_ch]['reverb'][1] > 255:
+            midi_in_settings[midi_in_ch]['reverb'][1] = 255
+          disp = midi_in_settings[midi_in_ch]['reverb'][1]
+          send_to = 1
+
+        elif enc_parm == PARM_RVB_FBACK:
+          midi_in_settings[midi_in_ch]['reverb'][2] = midi_in_settings[midi_in_ch]['reverb'][2] + delta * (10 if enc_parm_decade else 1)
+          if midi_in_settings[midi_in_ch]['reverb'][2] < 0:
+            midi_in_settings[midi_in_ch]['reverb'][2] = 0
+          elif midi_in_settings[midi_in_ch]['reverb'][2] > 255:
+            midi_in_settings[midi_in_ch]['reverb'][2] = 255
+          disp = midi_in_settings[midi_in_ch]['reverb'][2]
+          send_to = 1
+
+        elif enc_parm == PARM_CHR_PROG:
+          midi_in_settings[midi_in_ch]['chorus'][0] = midi_in_settings[midi_in_ch]['chorus'][0] + delta
+          if midi_in_settings[midi_in_ch]['chorus'][0] < 0:
+            midi_in_settings[midi_in_ch]['chorus'][0] = 7
+          elif midi_in_settings[midi_in_ch]['chorus'][0] > 7:
+            midi_in_settings[midi_in_ch]['chorus'][0] = 0
+          disp = midi_in_settings[midi_in_ch]['chorus'][0]
+          send_to = 2
+
+        elif enc_parm == PARM_CHR_LEVEL:
+          midi_in_settings[midi_in_ch]['chorus'][1] = midi_in_settings[midi_in_ch]['chorus'][1] + delta * (10 if enc_parm_decade else 1)
+          if midi_in_settings[midi_in_ch]['chorus'][1] < 0:
+            midi_in_settings[midi_in_ch]['chorus'][1] = 0
+          elif midi_in_settings[midi_in_ch]['chorus'][1] > 255:
+            midi_in_settings[midi_in_ch]['chorus'][1] = 255
+          disp = midi_in_settings[midi_in_ch]['chorus'][1]
+          send_to = 2
+
+        elif enc_parm == PARM_CHR_FBACK:
+          midi_in_settings[midi_in_ch]['chorus'][2] = midi_in_settings[midi_in_ch]['chorus'][2] + delta * (10 if enc_parm_decade else 1)
+          if midi_in_settings[midi_in_ch]['chorus'][2] < 0:
+            midi_in_settings[midi_in_ch]['chorus'][2] = 0
+          elif midi_in_settings[midi_in_ch]['chorus'][2] > 255:
+            midi_in_settings[midi_in_ch]['chorus'][2] = 255
+          disp = midi_in_settings[midi_in_ch]['chorus'][2]
+          send_to = 2
+
+        elif enc_parm == PARM_CHR_DELAY:
+          midi_in_settings[midi_in_ch]['chorus'][3] = midi_in_settings[midi_in_ch]['chorus'][3] + delta * (10 if enc_parm_decade else 1)
+          if midi_in_settings[midi_in_ch]['chorus'][3] < 0:
+            midi_in_settings[midi_in_ch]['chorus'][3] = 0
+          elif midi_in_settings[midi_in_ch]['chorus'][3] > 255:
+            midi_in_settings[midi_in_ch]['chorus'][3] = 255
+          disp = midi_in_settings[midi_in_ch]['chorus'][3]
+          send_to = 2
+
+        elif enc_parm == PARM_VIB_RATE:
+          midi_in_settings[midi_in_ch]['vibrate'][0] = midi_in_settings[midi_in_ch]['vibrate'][0] + delta * (10 if enc_parm_decade else 1)
+          if midi_in_settings[midi_in_ch]['vibrate'][0] < 0:
+            midi_in_settings[midi_in_ch]['vibrate'][0] = 0
+          elif midi_in_settings[midi_in_ch]['vibrate'][0] > 127:
+            midi_in_settings[midi_in_ch]['vibrate'][0] = 127
+          disp = midi_in_settings[midi_in_ch]['vibrate'][0]
+          send_to = 3
+
+        elif enc_parm == PARM_VIB_DEPTH:
+          midi_in_settings[midi_in_ch]['vibrate'][1] = midi_in_settings[midi_in_ch]['vibrate'][1] + delta * (10 if enc_parm_decade else 1)
+          if midi_in_settings[midi_in_ch]['vibrate'][1] < 0:
+            midi_in_settings[midi_in_ch]['vibrate'][1] = 0
+          elif midi_in_settings[midi_in_ch]['vibrate'][1] > 127:
+            midi_in_settings[midi_in_ch]['vibrate'][1] = 127
+          disp = midi_in_settings[midi_in_ch]['vibrate'][1]
+          send_to = 3
+
+        elif enc_parm == PARM_VIB_DELAY:
+          midi_in_settings[midi_in_ch]['vibrate'][2] = midi_in_settings[midi_in_ch]['vibrate'][2] + delta * (10 if enc_parm_decade else 1)
+          if midi_in_settings[midi_in_ch]['vibrate'][2] < 0:
+            midi_in_settings[midi_in_ch]['vibrate'][2] = 0
+          elif midi_in_settings[midi_in_ch]['vibrate'][2] > 127:
+            midi_in_settings[midi_in_ch]['vibrate'][2] = 127
+          disp = midi_in_settings[midi_in_ch]['vibrate'][2]
+          send_to = 3
+
+        # Display the label
+        label_midi_parm_value.setText('{:03d}'.format(disp))
+
+        # Send MIDI message
+        if delta != 0:
+          if send_to == 1:
+            set_midi_in_reverb(midi_in_settings[midi_in_ch]['reverb'][0], midi_in_settings[midi_in_ch]['reverb'][1], midi_in_settings[midi_in_ch]['reverb'][2])
+          elif send_to == 2:
+            set_midi_in_chorus(midi_in_settings[midi_in_ch]['chorus'][0], midi_in_settings[midi_in_ch]['chorus'][1], midi_in_settings[midi_in_ch]['chorus'][2], midi_in_settings[midi_in_ch]['chorus'][3])
+          elif send_to == 3:
+            set_midi_in_vibrate(midi_in_settings[midi_in_ch]['vibrate'][0], midi_in_settings[midi_in_ch]['vibrate'][1], midi_in_settings[midi_in_ch]['vibrate'][2])
+
+    # Change master volume
+    elif enc_menu == ENC_SMF_MASTER_VOL or enc_menu == ENC_MIDI_MASTER_VOL:
+      # Decade value button (toggle)
+      if enc_button and enc_button_ch[enc_ch-1]:
+        enc_mastervol_decade = not enc_mastervol_decade
+
+      if enc_mastervol_decade:
+        encoder8_0.set_led_rgb(enc_ch, 0xffa000)
+
+      # Change master volume
+      if delta != 0: 
+          set_synth_master_volume(delta * (10 if enc_mastervol_decade else 1))
+
+      # All notes off
+      if enc_button:
+        all_notes_off()
+
+    # not available
+    elif enc_menu == ENC_SMF_EN_na1 or enc_menu == ENC_MIDI_EN_na1:
+      pass
 
 
 def setup():
   global title_smf, title_smf_params, title_midi_in, title_midi_in_params, title_general
   global label_channel, i2c0, kbstr, label_smf_fnum, label_smf_tempo
   global label_smf_file, label_smf_fname, label_smf_transp, label_smf_volume, label_program, label_program_name, label_master_volume
-  global label_reverb_level, label_chorus_level, label_smf_reverb_lv, label_smf_chorus_lv
-  global enc_ch_val, enc_psmf_labels, enc_pmin_labels
+  global label_midi_parameter, label_midi_parm_value, label_smf_parameter, label_smf_parm_value
+  global enc_ch_val
   global midi_uart, label_midi_in
-  global midi_in_settings, midi_in_ch
+  global midi_in_settings, midi_in_ch, midi_in_set_num, label_midi_in_set, label_midi_in_set_ctrl
 
   M5.begin()
   Widgets.fillScreen(0x222222)
@@ -1316,28 +1556,29 @@ def setup():
   label_smf_transp = Widgets.Label("label_smf_transp", 46, 40, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
   label_smf_volume = Widgets.Label("label_smf_volume", 94, 40, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
   label_smf_tempo = Widgets.Label("label_smf_tempo", 150, 40, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
-  label_smf_reverb_lv = Widgets.Label("label_smf_reverb_lv", 202, 40, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
-  label_smf_chorus_lv = Widgets.Label("label_smf_chorus_lv", 262, 40, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+  label_smf_parameter = Widgets.Label("label_smf_parameter", 201, 40, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+  label_smf_parm_value = Widgets.Label("label_smf_parm_value", 262, 40, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+
+  # SMF file information
   label_smf_file = Widgets.Label("label_smf_file", 0, 60, 1.0, 0x00ffcc, 0x222222, Widgets.FONTS.DejaVu18)
   label_smf_fname = Widgets.Label("label_smf_fname", 60, 60, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
 
   # GUI for MIDI-IN play
-  label_channel = Widgets.Label("label_channel", 0, 140, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
-  label_program = Widgets.Label("label_program", 46, 140, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
-  label_reverb_level = Widgets.Label("label_reverb_level", 202, 140, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
-  label_chorus_level = Widgets.Label("label_chorus_level", 262, 140, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+  label_midi_in_set = Widgets.Label("label_midi_in_set", 0, 140, 1.0, 0x00ffcc, 0x222222, Widgets.FONTS.DejaVu18)
+  label_midi_in_set_ctrl = Widgets.Label("label_midi_in_set", 46, 140, 1.0, 0x00ffcc, 0x222222, Widgets.FONTS.DejaVu18)
+  label_channel = Widgets.Label("label_channel", 108, 140, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+  label_program = Widgets.Label("label_program", 159, 140, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+  label_midi_parameter = Widgets.Label("label_midi_parameter", 204, 140, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+  label_midi_parm_value = Widgets.Label("label_midi_parm_value", 264, 140, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
 
+  # Program name
   label_program_name = Widgets.Label("label_program_name", 0, 160, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
 
-  # MIDI IN
-  label_midi_in = Widgets.Label("label_midi_in", 200, 100, 1.0, 0x00ffcc, 0x222222, Widgets.FONTS.DejaVu18)
+  # MIDI IN status
+  label_midi_in = Widgets.Label("label_midi_in", 262, 100, 1.0, 0x00ffcc, 0x222222, Widgets.FONTS.DejaVu18)
 
   # Master Volume
   label_master_volume = Widgets.Label("label_master_volume", 0, 220, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
-
-  # Labels to edit in the parameter selector
-  enc_psmf_labels = [label_smf_reverb_lv,label_smf_reverb_lv,label_smf_reverb_lv,label_smf_chorus_lv,label_smf_chorus_lv,label_smf_chorus_lv,label_smf_chorus_lv]
-  enc_pmin_labels = [label_reverb_level,label_reverb_level,label_reverb_level,label_chorus_level,label_chorus_level,label_chorus_level,label_chorus_level]
 
   # I2C
   i2c0 = I2C(0, scl=Pin(33), sda=Pin(32), freq=100000)
@@ -1347,7 +1588,7 @@ def setup():
 
   # SYNTH settings
   for ch in range(16):
-    midi_in_settings.append({'program':0, 'gmbank':0, 'reverb':[0,0,0], 'chorus':[0,0,0,0]})
+    midi_in_settings.append({'program':0, 'gmbank':0, 'reverb':[0,0,0], 'chorus':[0,0,0,0], 'vibrate':[0,0,0]})
 
   # SYNTH unit
   global synth_0
@@ -1362,11 +1603,13 @@ def setup():
 
   # Initialize GUI display
   title_smf.setText('SMF PLAYER')
-  title_smf_params.setText('NO. TRN VOL TEMP REVB CHOR')
+  title_smf_params.setText('NO. TRN VOL TEMP PARM VAL')
   title_midi_in.setText('MIDI-IN PLAYER')
-  title_midi_in_params.setText('CH. PRG  n/a   n/a   REVB CHOR')
+  title_midi_in_params.setText('NO. FIL  MCH PROG PARM VAL')
   title_general.setText('VOL')
 
+  label_midi_in_set.setText('{:03d}'.format(midi_in_set_num))
+  label_midi_in_set_ctrl.setText(enc_midi_set_ctrl_list[enc_midi_set_ctrl])
   label_midi_in.setText('M-IN')
   label_midi_in.setVisible(False)
 
@@ -1377,6 +1620,7 @@ def setup():
   label_smf_fname.setText('none')
   label_smf_fname.setVisible(True)
   label_smf_fnum.setText('{:03d}'.format(0))
+  label_smf_fnum.setColor(0x00ffcc, 0x222222)
 
   set_smf_transpose(0)
   set_smf_volume_delta(0)
@@ -1388,10 +1632,15 @@ def setup():
   set_midi_in_program(0)
   set_midi_in_reverb()
   set_midi_in_chorus()
-  label_smf_reverb_lv.setText('P{:03d}'.format(smf_reverb[0]))
-  label_smf_chorus_lv.setText('P{:03d}'.format(smf_chorus[0]))
-  label_reverb_level.setText('P{:03d}'.format(midi_in_settings[midi_in_ch]['reverb'][0]))
-  label_chorus_level.setText('P{:03d}'.format(midi_in_settings[midi_in_ch]['chorus'][0]))
+  label_smf_parameter.setText(enc_parameters[0])
+  label_smf_parm_value.setText('{:03d}'.format(smf_chorus[0]))
+  label_smf_parameter.setColor(0x00ffcc, 0x222222)
+  label_smf_parm_value.setColor(0xffffff, 0x222222)
+
+  label_midi_parameter.setText(enc_parameters[0])
+  label_midi_parm_value.setText('{:03d}'.format(midi_in_settings[midi_in_ch]['reverb'][0]))
+  label_midi_parameter.setColor(0x00ffcc, 0x222222)
+  label_midi_parm_value.setColor(0xffffff, 0x222222)
 
   # Initialize 8encoder
   for ch in range(1,9):
