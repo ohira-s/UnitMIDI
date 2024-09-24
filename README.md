@@ -10,17 +10,18 @@
           MIDI IN: Not available.
           MIDI OUT: Send MIDI data.
     Functions:
-          Play a standard MIDI file in SD card.
+          Play standard MIDI files in SD card.
           Play the synthesizer with CardKB Mini V1.1 keyboard.
 ---
 ### UIFlow/UnitMIDI_SMF_MIDIin.py
     CPU: M5Stack CORE2
-          PORT-A: 8encoder, (I2C)
+          PORT-A: 8encoder (I2C)
           PORT-C: Unit-MIDI (UART)
-          Micro SD: MIDI Files(format0) and GM programe names list.
+          Micro SD: MIDI Files(format0), GM program names list and MIDI channel settings.
     Unit-MIDI:
-          MIDI IN: Receive MIDI data.
-          MIDI OUT: Send MIDI data.
+          MIDI IN: Receive MIDI data (DIN5)
+          MIDI OUT: Send MIDI data (DIN5)
     Functions:
-          Play a standard MIDI file in SD card.
-          Play the synthesizer by MIDI data received MIDI IN.
+          Play standard MIDI files in SD card.
+          Play the synthesizer by MIDI data received via MIDI IN.
+          Save and load MIDI channel settings.
