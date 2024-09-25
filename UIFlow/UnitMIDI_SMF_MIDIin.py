@@ -8,6 +8,8 @@
 #     MIDI-IN instruments (Optional)
 #
 #   Program: micropython for UIFlow2.0 (V2.1.4)
+#            UnitMIDI_SMF_MIDIin.py
+#              1.0.0: 09/24/2024
 #
 # Copyright (C) Shunsuke Ohira, 2024
 #####################################################################################################
