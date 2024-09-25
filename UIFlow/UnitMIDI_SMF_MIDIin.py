@@ -1407,7 +1407,7 @@ def setup():
   label_program_name = Widgets.Label("label_program_name", 0, 160, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
 
   # MIDI IN status
-  label_midi_in = Widgets.Label("label_midi_in", 262, 100, 1.0, 0x00ffcc, 0x222222, Widgets.FONTS.DejaVu18)
+  label_midi_in = Widgets.Label("label_midi_in", 165, 100, 1.0, 0x00ffcc, 0x222222, Widgets.FONTS.DejaVu18)
 
   # Master Volume
   label_master_volume = Widgets.Label("label_master_volume", 0, 220, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
@@ -1459,7 +1459,7 @@ def setup():
 
   label_midi_in_set.setText('{:03d}'.format(midi_in_set_num))
   label_midi_in_set_ctrl.setText(enc_midi_set_ctrl_list[enc_midi_set_ctrl])
-  label_midi_in.setText('M-IN')
+  label_midi_in.setText('*')
   label_midi_in.setVisible(False)
 
   set_synth_master_volume(0)
