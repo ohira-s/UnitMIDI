@@ -1200,7 +1200,7 @@ def encoder_read():
         elif enc_parm == PARM_VIB_DEPTH:
           disp = smf_vibrate[1]
         elif enc_parm == PARM_VIB_DELAY:
-          disp = smf_vibrate[1]
+          disp = smf_vibrate[2]
 
         label_smf_parameter.setText(enc_parameters[enc_parm])
         label_smf_parm_value.setText('{:03d}'.format(disp))
