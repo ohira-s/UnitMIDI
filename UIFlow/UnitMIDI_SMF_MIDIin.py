@@ -12,6 +12,9 @@
 #              1.0.0: 09/24/2024
 #              1.1.0: 09/25/2024
 #                       Improved data structor for effector parameters to reduce code.
+#              1.1.1: 09/26/2024
+#                       Remove functions not used.
+#                       Add documents.
 #
 # Copyright (C) Shunsuke Ohira, 2024
 #####################################################################################################
@@ -121,7 +124,6 @@ import M5
 from M5 import *
 from unit import CardKBUnit
 from hardware import *
-#from unit import SynthUnit
 from unit import MIDIUnit
 from unit import Encoder8Unit
 import time
@@ -137,7 +139,7 @@ title_midi_in = None
 title_midi_in_params = None
 title_general = None
 
-# SMF labels
+# SMF data labels
 label_master_volume = None
 label_smf_file = None
 label_smf_fname = None
@@ -149,7 +151,7 @@ label_smf_parameter = None
 label_smf_parm_value = None
 label_smf_parm_title = None
 
-# MIDI labels
+# MIDI data labels
 label_midi_in_set = None
 label_midi_in_set_ctrl = None
 label_midi_in = None
@@ -161,82 +163,92 @@ label_midi_parm_value = None
 label_midi_parm_title = None
 
 # I2C
-i2c0 = None
+i2c0 = None                 # I2C object
 
 # 8encoders unit
-encoder8_0 = None
-enc_button_ch = [False]*8
-enc_slide_switch = None
+encoder8_0 = None           # 8encoder object
+enc_button_ch = [False]*8   # Previous status of 8 push switches (on:True, off:False)
+enc_slide_switch = None     # 8encoder slide switch status (on:True, off:False)
 
 # Encoder number in slide switch on
+#   11: CH1 .. 18: CH8
+#   Change number, you can change function assignment channel.
 ENC_SMF_FILE       = 11     # Select SMF file
 ENC_SMF_TRANSPORSE = 12     # Set transpose for SMF player
 ENC_SMF_VOLUME     = 13     # Set volume for SMF player
 ENC_SMF_TEMPO      = 14     # Set tempo for SMF player
 ENC_SMF_PARAMETER  = 15     # Select parameter to edit
-ENC_SMF_CTRL       = 16     # Set parameter value
+ENC_SMF_CTRL       = 16     # Set effector parameter values
 ENC_SMF_EN_na1     = 17     # not available
 ENC_SMF_MASTER_VOL = 18     # Change master volume
 
 # Encoder number in slide switch off
-ENC_MIDI_SET        = 1      # Select MIDI setting file
-ENC_MIDI_FILE       = 2      # File operation (read/write)
-ENC_MIDI_CHANNEL    = 3      # Select MIDI channel to edit
-ENC_MIDI_PROGRAM    = 4      # Select program for MIDI channel
-ENC_MIDI_PARAMETER  = 5      # Select parameter to edit
-ENC_MIDI_CTRL       = 6      # Set parameter value
-ENC_MIDI_EN_na1     = 7      # not available
-ENC_MIDI_MASTER_VOL = 8      # Change master volume
+#   1: CH1 .. 8: CH8
+#   Change number, you can change function assignment channel.
+ENC_MIDI_SET        = 1     # Select MIDI setting file
+ENC_MIDI_FILE       = 2     # File operation (load, save)
+ENC_MIDI_CHANNEL    = 3     # Select MIDI channel to edit
+ENC_MIDI_PROGRAM    = 4     # Select program for MIDI channel
+ENC_MIDI_PARAMETER  = 5     # Select parameter to edit
+ENC_MIDI_CTRL       = 6     # Set effector parameter values
+ENC_MIDI_EN_na1     = 7     # not available
+ENC_MIDI_MASTER_VOL = 8     # Change master volume
 
 # MIDI setting file controls list
-enc_midi_set_ctrl_list = ['LOD', 'SAV']
-MIDI_SET_FILES_MAX = 1000
-MIDI_SET_FILE_LOAD = 0
-MIDI_SET_FILE_SAVE = 1
-enc_midi_set_ctrl  = MIDI_SET_FILE_LOAD
+enc_midi_set_ctrl_list = ['LOD', 'SAV']     # MIDI IN setting file operation sign (load, save)
+MIDI_SET_FILES_MAX = 1000                   # Maximum MIDI IN setting files
+MIDI_SET_FILE_LOAD = 0                      # Read a MIDI IN setting file menu id
+MIDI_SET_FILE_SAVE = 1                      # Save a MIDI IN setting file menu id
+enc_midi_set_ctrl  = MIDI_SET_FILE_LOAD     # Currnet MIDI IN setting file operation id
 
-# Parameter names list
-enc_parameter_info = None
-enc_total_parameters = 0
-EFFECTOR_PARM_INIT  = 0
+# Effector control parameters
+enc_parameter_info = None                   # Information to change program task for the effector controle menu
+                                            # Data definition is in setup(), see setup(). 
+enc_total_parameters = 0                    # Sum of enc_parameter_info[*]['params'] array size, see setup()
+EFFECTOR_PARM_INIT  = 0                     # Initial parameter index
+enc_parm = EFFECTOR_PARM_INIT               # Current parameter index
 
-enc_parm = EFFECTOR_PARM_INIT
-enc_parm_decade = False
-enc_volume_decade = False
-enc_mastervol_decade = False
-enc_midi_set_decade = False
-enc_midi_prg_decade = False
+# Change parameter value by decade or 1 (decade: True, 1: False)
+enc_parm_decade = False                     # Change effector parameter values 
+enc_volume_decade = False                   # Change SMF volume
+enc_mastervol_decade = False                # Change master volume
+enc_midi_set_decade = False                 # Select MIDI IN setting file
+enc_midi_prg_decade = False                 # Select program for MIDI IN channel
 
 # SYNTH Unit instance
-synth_0 = None
+synth_0 = None                              # Unit-MIDI synthesizer object
 
 # MIDI-IN player
-midi_in_settings = []
-midi_in_ch = 0
-midi_in_file_path = '/sd//SYNTH/MIDIUNIT/'
-midi_in_set_num = 0
+midi_in_settings = []                       # MIDI IN settings for each channel, see setup()
+                                            # Each channel has following data structure
+                                            #     {'program':0, 'gmbank':0, 'reverb':[0,0,0], 'chorus':[0,0,0,0], 'vibrate':[0,0,0]}
+                                            #     {'program':PROGRAM, 'gmbank':GM BANK, 'reverb':[PROGRAM,LEVEL,FEEDBACK], 'chorus':[PROGRAM,LEVEL,FEEDBACK,DELAY], 'vibrate':[RATE,DEPTH,DELAY]}
+midi_in_ch = 0                              # MIDI IN channel to edit
+midi_in_file_path = '/sd//SYNTH/MIDIUNIT/'  # MIDI IN setting files path
+midi_in_set_num = 0                         # MIDI IN setting file number to load/save
 
 # MIDI master volume
-master_volume = 127
+master_volume = 127                         # Master volume value (0..127)
 
 # SMF player
-smf_file_path = '/sd//SYNTH/MIDIFILE/'
-mf = None
-playing_smf = False
-playing_file = ''
-smf_play_mode = 'PLAY'
-smf_files = []
-smf_file_selected = -1
-smf_speed_factor = 1.0
-smf_volume_delta = 0
-smf_gmbank = 0
+smf_file_path = '/sd//SYNTH/MIDIFILE/'      # Standard MIDI files path
+mf = None                                   # Standard MIDI file object to read
+playing_smf = False                         # Playing a SMF at the moment or not
+playing_file = ''                           # Standard MIDI file name to read
+smf_play_mode = 'PLAY'                      # SMF player mode ('PLAY', 'STOP', 'PAUSE')
+smf_files = []                              # Standar MIDI file names list
+smf_file_selected = -1                      # SMF index in smf_files to read
+smf_speed_factor = 1.0                      # Magnification SMF player speed
+smf_volume_delta = 0                        # Volume control for SMF player
+smf_gmbank = 0                              # GM bank number (normally 0, option is 127)
 #smf_gmbank = 127
-smf_transpose = 0
+smf_transpose = 0                           # Key transpose for SMF player
+                                            # Effector settings for SMF player
 smf_settings = {'reverb':[0,0,0], 'chorus': [0,0,0,0], 'vibrate': [0,0,0]}
 
 # MIDI IN/OUT
-midi_uart = False
-midi_received = False
+midi_uart = False                           # MIDI UART object of Unit-MIDI
+midi_received = False                       # Received MIDI IN data or not
 
 
 # Initialize SD Card device
@@ -259,6 +271,7 @@ def encoder_init():
 
 
 # Write MIDI IN settings to SD card
+#   num: File number (0..999)
 def write_midi_in_settings(num):
   global midi_in_file_path, midi_in_settings
 
@@ -274,6 +287,7 @@ def write_midi_in_settings(num):
 
 
 # Read MIDI IN settings from SD card
+#   num: File number (0..999)
 def read_midi_in_settings(num):
   global midi_in_file_path
 
@@ -319,11 +333,16 @@ def delta_time(btime):
 
 
 # MIDI EVENT: Note off
+#   ch: MIDI channel
+#   rb: Note number
 def midiev_note_off(ch, rb):
   notes_off(ch, rb)
 
 
 # MIDI EVENT: Note on
+#   ch: MIDI channel
+#   rb[0]: Note number
+#   rb[1]: Verocity (0 means Note Off)
 def midiev_note_on(ch, rb):
   global smf_volume_delta
   
@@ -339,11 +358,14 @@ def midiev_note_on(ch, rb):
 
 
 # MIDI EVENT: Polyphonic key pressure
+#   ch: MIDI channel
+#   rb: Note number
 def midiev_polyphonic_key_pressure(ch, rb):
   pass
 
 
-# MIDI EVENT: Control change
+# MIDI EVENT: Control change for standard MIDI file
+#   ch: MIDI channel
 #   rb[0]: Control Number
 #   rb[1]: Data
 def midiev_control_change(ch, rb):
@@ -359,38 +381,41 @@ def midiev_control_change(ch, rb):
     synth_0.set_chorus(channel, 0, rb[1], 127, 127)
 
 
-# MIDI EVENT: Program change
+# MIDI EVENT: Program change for standard MIDI file
+#   ch: MIDI channel
+#   rb[0]: Program Number
 def midiev_program_change(ch, rb):
   global synth_0, smf_gmbank
   synth_0.set_instrument(smf_gmbank, int(ch), int(rb[0]))
 
 
-# MIDI EVENT: channel pressure
+# MIDI EVENT: channel pressure for standard MIDI file
 def midiev_channel_pressure(ch, rb):
   pass
 
 
-# MIDI EVENT: Pitch bend
+# MIDI EVENT: Pitch bend for standard MIDI file
 def midiev_pitch_bend(ch, rb):
   pass
 
 
-# MIDI EVENT: SysEx F0
+# MIDI EVENT: SysEx F0 for standard MIDI file
 def midiev_sysex_f0(rb):
   pass
 
 
-# MIDI EVENT: SysEx F7
+# MIDI EVENT: SysEx F7 for standard MIDI file
 def midiev_sysex_f7(rb):
   pass
 
 
-# MIDI EVENT: SysEx FF (Meta data)
+# MIDI EVENT: SysEx FF (Meta data) for standard MIDI file
 def midiev_meta_data(et, rb):
   pass
 
 
 # Copy a byte list into an integer list
+#   blist[]: Byte data list (SMF data)
 def to_int_list(blist):
   ilist = []
   for b in blist:
@@ -398,7 +423,9 @@ def to_int_list(blist):
   return ilist
 
 
-# Play a MIDI file class for SYNTH Unit
+# Play a MIDI file function for Unit-MIDI, works in thread process.
+# Read and interpret a standard MIDI file (format-0) and send play data to Unit-MIDI.
+#   fname: Standar MIDI file name to play
 def play_midi(fname):
   global smf_file_path, mf, synth_0
   global playing_smf, playing_file, smf_play_mode, smf_speed_factor
@@ -672,38 +699,19 @@ def play_midi(fname):
   smf_play_mode = 'STOP'
 
 
-# Get a transposed tone name (C4, -1 --> C3)
-def octaver(name, sft):
-  print('octarver')
-  oct = int(name[-1]) + sft
-  if oct < 0:
-    oct = 0
-  elif oct > 7:
-    oct = 7
-
-  print('oct=' + str(oct))
-
-  if len(name) == 2:
-    return name[0] + str(oct)
-  else:
-    return name[0:2] + str(oct)
-
-
-# Shift notes
-def shitf_notes(notes_list, sft):
-  sft_list = []
-  for nt in notes_list:
-    sft_list.append(nt + sft)
-  return sft_list
-
-
 # Note on a tone in a channel with vol volume.
+# The note is transposed by SMF key transport value.
+#   channle: MIDI channel
+#   tone: MIDI note number
+#   vol: Note on velocity
 def note(channel, tone, vol):
   global synth_0, smf_transpose
   synth_0.set_note_on(channel, tone + smf_transpose, vol)
 
 
 # Note off all tones in a channel (tones: [60,62,...] etc)
+#   channle: MIDI channel
+#   tone: MIDI note number
 def notes_off(channel, tones):
   global synth_0
 
@@ -712,6 +720,7 @@ def notes_off(channel, tones):
 
 
 # All notes off in a channel.
+#   channel: MIDI channel (All channel note off, if channel is None)
 def all_notes_off(channel = None):
   if channel is None:
     for ch in range(16):
@@ -720,25 +729,40 @@ def all_notes_off(channel = None):
     synth_0.set_all_notes_off(channel)
 
 
-# Reverb
+# Set reverb parameter
+#   ch: MIDI channel
+#   prog : Reverb program number
+#   level: Reverb level
+#   fback: Reverb feedback
 def control_reverb(ch, prog, level, fback):
   global synth_0
   synth_0.set_reverb(ch, prog, level, fback)
 
 
-# Chorus
+# Set chorus parameter
+#   ch: MIDI channel
+#   prog : Chorus program number
+#   level: Chorus level
+#   fback: Chorus feedback
+#   delay: Chorus delay
 def control_chorus(ch, prog, level, fback, delay):
   global synth_0
   synth_0.set_chorus(ch, prog, level, fback, delay)
 
 
-# Vibrate
+# Set vibrate parameter
+#   ch: MIDI channel
+#   rate : Chorus rate
+#   depth: Chorus depth
+#   delay: Chorus delay
 def control_vibrate(ch, rate, depth, delay):
   global synth_0
   synth_0.set_vibrate(ch, rate, depth, delay)
 
 
 # Get GM prgram name
+#   gmbank: GM bank number
+#   program: GM program number
 def get_gm_program_name(gmbabnk, program):
   with open(smf_file_path + 'GM0.TXT') as f:
     for mf in f:
@@ -753,7 +777,9 @@ def get_gm_program_name(gmbabnk, program):
   return 'UNKNOWN'
 
 
-# Set and show volume delta value for SMF player
+# Set and show new volume delta value for SMF player
+# smf_volume_delta value is added to note-on-verocity.
+#   dlt: volume delta value
 def set_smf_volume_delta(dlt):
   global smf_volume_delta, label_smf_volume
 
@@ -761,7 +787,9 @@ def set_smf_volume_delta(dlt):
   label_smf_volume.setText('{:0=+3d}'.format(smf_volume_delta))
 
 
-# Set and show transpose value for SMF player
+# Set and show new transpose value for SMF player
+# smf_transpose value is added to note-on note number.
+#   dlt: transpose delta value
 def set_smf_transpose(dlt):
   global smf_transpose, label_smf_transp
 
@@ -773,7 +801,8 @@ def set_smf_transpose(dlt):
   label_smf_transp.setText('{:0=+3d}'.format(smf_transpose))
 
 
-# Send a MIDI channel settings
+# Send a MIDI channel settings to Unit-MIDI
+#   ch: MIDI channel
 def send_midi_in_settings(ch):
   synth_0.set_instrument(midi_in_settings[ch]['gmbank'], ch, midi_in_settings[ch]['program'])
   control_reverb(midi_in_ch, midi_in_settings[ch]['reverb'][0], midi_in_settings[ch]['reverb'][1], midi_in_settings[ch]['reverb'][2])
@@ -787,7 +816,8 @@ def send_all_midi_in_settings():
     send_midi_in_settings(ch)
 
 
-# Set and show channel for MIDI-IN player
+# Set and show new MIDI channel for MIDI-IN player
+#   dlt: MIDI channel delta value added to the current MIDI IN channel to edit.
 def set_midi_in_channel(dlt):
   global midi_in_ch, label_channel
   global midi_in_settings, enc_parm
@@ -803,6 +833,9 @@ def set_midi_in_channel(dlt):
   midi_in_chorus = midi_in_settings[midi_in_ch]['chorus']
   set_midi_in_chorus(midi_in_chorus[0], midi_in_chorus[1], midi_in_chorus[2], midi_in_chorus[3])
 
+  midi_in_vibrate = midi_in_settings[midi_in_ch]['vibrate']
+  set_midi_in_vibrate(midi_in_vibrate[0], midi_in_vibrate[1], midi_in_vibrate[2])
+
   # Reset the parameter to edit
   enc_parm = EFFECTOR_PARM_INIT
   label_midi_parm_title.setText(enc_parameter_info[enc_parm]['title'])
@@ -810,7 +843,8 @@ def set_midi_in_channel(dlt):
   label_midi_parm_value.setText('{:03d}'.format(midi_in_settings[midi_in_ch]['reverb'][0]))
 
 
-# Set and show program for MIDI-IN player
+# Set and show new program to the current MIDI channel for MIDI-IN player
+#   dlt: GM program delta value added to the current MIDI IN channel to edit.
 def set_midi_in_program(dlt):
   global synth_0, label_program, label_program_name
   global midi_in_settings, midi_in_ch
@@ -824,7 +858,8 @@ def set_midi_in_program(dlt):
   synth_0.set_instrument(midi_in_settings[midi_in_ch]['gmbank'], midi_in_ch, midi_in_program)
 
 
-# Set and show master volume value
+# Set and show new master volume value
+#   dlt: Master volume delta value added to the current value.
 def set_synth_master_volume(dlt):
   global synth_0, master_volume, label_master_volume
 
@@ -837,7 +872,10 @@ def set_synth_master_volume(dlt):
   label_master_volume.setText('{:0>3d}'.format(master_volume))
 
 
-# Set reverb for MIDI-IN player
+# Set reverb parameters for the current MIDI IN channel
+#   prog : Reverb program
+#   level: Reverb level
+#   fback: Reverb feedback
 def set_midi_in_reverb(prog=None, level=None, fback=None):
   global midi_in_ch
   global midi_in_settings, midi_in_ch
@@ -860,7 +898,10 @@ def set_midi_in_reverb(prog=None, level=None, fback=None):
     control_reverb(midi_in_ch, midi_in_reverb[0], midi_in_reverb[1], midi_in_reverb[2])
 
 
-# Set reverb for SMF player
+# Set reverb parameters for SMF player (to all MIDI channel)
+#   prog : Reverb program
+#   level: Reverb level
+#   fback: Reverb feedback
 def set_smf_reverb(prog=None, level=None, fback=None):
   global label_smf_parameter, smf_settings, midi_in_ch
 
@@ -879,11 +920,14 @@ def set_smf_reverb(prog=None, level=None, fback=None):
 
   if not disp is None:
     for ch in range(16):
-      if ch != midi_in_ch:
-        control_reverb(ch, smf_settings['reverb'][0], smf_settings['reverb'][1], smf_settings['reverb'][2])
+      control_reverb(ch, smf_settings['reverb'][0], smf_settings['reverb'][1], smf_settings['reverb'][2])
 
 
-# Set chorus for MIDI-IN player
+# Set chorus parameters for the current MIDI-IN channel
+#   prog : Chorus program
+#   level: Chorus level
+#   fback: Chorus feedback
+#   delay: Chorus delay
 def set_midi_in_chorus(prog=None, level=None, fback=None, delay=None):
   global midi_in_ch
   global midi_in_settings
@@ -910,7 +954,11 @@ def set_midi_in_chorus(prog=None, level=None, fback=None, delay=None):
     control_chorus(midi_in_ch, midi_in_chorus[0], midi_in_chorus[1], midi_in_chorus[2], midi_in_chorus[3])
 
 
-# Set chorus for SMF player
+# Set chorus parameters for SMF player (to all MIDI channel)
+#   prog : Chorus program
+#   level: Chorus level
+#   fback: Chorus feedback
+#   delay: Chorus delay
 def set_smf_chorus(prog=None, level=None, fback=None, delay=None):
   global label_smf_parm_value, smf_settings, midi_in_ch
 
@@ -933,11 +981,13 @@ def set_smf_chorus(prog=None, level=None, fback=None, delay=None):
 
   if send:
     for ch in range(16):
-      if ch != midi_in_ch:
-        control_chorus(ch, smf_settings['chorus'][0], smf_settings['chorus'][1], smf_settings['chorus'][2], smf_settings['chorus'][3])
+      control_chorus(ch, smf_settings['chorus'][0], smf_settings['chorus'][1], smf_settings['chorus'][2], smf_settings['chorus'][3])
 
 
-# Set vibrate for MIDI-IN player
+# Set vibrate parameters for the current MIDI-IN channel
+#   level: Vibrate level
+#   depth: Vibrate depth
+#   delay: Vibrate delay
 def set_midi_in_vibrate(rate=None, depth=None, delay=None):
   global midi_in_ch
   global midi_in_settings
@@ -960,7 +1010,10 @@ def set_midi_in_vibrate(rate=None, depth=None, delay=None):
     control_vibrate(midi_in_ch, midi_in_vibrate[0], midi_in_vibrate[1], midi_in_vibrate[2])
 
 
-# Set vibrate for SMF player
+# Set vibrate parameters for SMF player (to all MIDI channel)
+#   level: Vibrate level
+#   depth: Vibrate depth
+#   delay: Vibrate delay
 def set_smf_vibrate(rate=None, depth=None, delay=None):
   global label_smf_parm_value, smf_settings, midi_in_ch
 
@@ -979,11 +1032,11 @@ def set_smf_vibrate(rate=None, depth=None, delay=None):
 
   if send:
     for ch in range(16):
-      if ch != midi_in_ch:
-        control_vibrate(ch, smf_settings['vibrate'][0], smf_settings['vibrate'][1], smf_settings['vibrate'][2])
+      control_vibrate(ch, smf_settings['vibrate'][0], smf_settings['vibrate'][1], smf_settings['vibrate'][2])
 
 
 # MIDI IN
+# Receive MIDI IN data (UART), then send it to MIDI OUT (UART)
 def midi_in():
   global midi_uart, midi_received, label_midi_in
 
@@ -1001,7 +1054,7 @@ def midi_in():
     midi_received = False
 
 
-# Make the midi file catalog
+# Make the standard midi files catalog
 def midi_file_catalog():
   global label_smf_fname, smf_file_selected
   with open(smf_file_path + 'LIST.TXT') as f:
@@ -1020,7 +1073,7 @@ def midi_file_catalog():
       smf_files[i][2] = float(smf_files[i][2])
 
 
-# Read 8encoder values
+# Read 8encoder values and take actions
 def encoder_read():
   global encoder8_0, enc_button_ch, enc_slide_switch, enc_parm, enc_parm_decade, enc_volume_decade, enc_mastervol_decade
   global midi_in_ch, playing_smf, smf_speed_factor, smf_file_selected, smf_files, smf_play_mode
@@ -1360,6 +1413,7 @@ def encoder_read():
       pass
 
 
+# Set up the program
 def setup():
   global title_smf, title_smf_params, title_midi_in, title_midi_in_params, title_general
   global label_channel, i2c0, kbstr, label_smf_fnum, label_smf_tempo
@@ -1501,6 +1555,7 @@ def setup():
   all_notes_off()
 
 
+# Task loop
 def loop():
   global i2c0
   M5.update()
@@ -1508,6 +1563,7 @@ def loop():
   encoder_read()
 
 
+# Main program
 if __name__ == '__main__':
   try:
     setup()
