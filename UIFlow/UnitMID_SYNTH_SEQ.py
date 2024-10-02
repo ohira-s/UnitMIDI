@@ -17,6 +17,9 @@
 #                       Add documents.
 #            UnitMIDI_SYNTH_SEQ.py
 #              1.0.0: 10/01/2024
+#              1.0.1: 10/02/2024
+#                       Velocity editor in Sequencer screen.
+#                       Start and end time setting to play with sequencer.
 #
 # Copyright (C) Shunsuke Ohira, 2024
 #####################################################################################################
@@ -340,6 +343,7 @@ seq_cursor_note = None              # The score and note data on the cursor (to 
 seq_track_midi = [0,1]              # MIDI channels for the two tracks on the display
 seq_disp_time = [0,12]              # Time span to display on sequencer
 seq_disp_key = [[57,74],[57,74]]    # Key span to display on sequencer
+seq_play_time = [0,8]               # Start and end time to play with sequencer
 
 # Sequencer file
 SEQ_FILE_LOAD = 0
@@ -349,10 +353,14 @@ seq_file_number = 0                       # Sequencer file number
 seq_file_ctrl = SEQ_FILE_LOAD             # Currnet MIDI IN setting file operation id
 
 # Sequencer parameter
-seq_parameter_names = ['P:M-CH', 'P:TIME']        # Sequencer parameter strings to show
+#   Sequencer parameter strings to show
+seq_parameter_names = ['P:M-CH', 'P:TIME', 'P:VELO', 'P:PLYS', 'P:PLYE']
 seq_total_parameters = len(seq_parameter_names)   # Number of seq_parm
 SEQUENCER_PARM_CHANNEL = 0                        # Change a track MIDI channel
 SEQUENCER_PARM_TIMESPAN = 1                       # Change times to display
+SEQUENCER_PARM_VELOCITY = 2                       # Change note velocity
+SEQUENCER_PARM_PLAYSTART = 3                      # Start and end time to play with sequencer
+SEQUENCER_PARM_PLAYEND = 4                        # End time to play with sequencer
 seq_parm = SEQUENCER_PARM_CHANNEL                 # Current sequencer parameter index (= initial)
 
 # Sequencer channel data
@@ -560,11 +568,21 @@ def sequencer_new_note(channel, note_on_time, note_key):
     # Add the note to the existing score
     current = seq_score[sc]
     if current['time'] == note_on_time:
-      current['notes'].append({'channel': channel, 'note': note_key, 'velocity': 127, 'duration': 1})
+      # Inset new note at sorted order by key
+      nt = 0
+      notes_len = len(current['notes'])
+      for nt in range(notes_len):
+        if current['notes'][nt]['note'] > note_key:
+          current['notes'].insert(nt, {'channel': channel, 'note': note_key, 'velocity': current['notes'][nt]['velocity'], 'duration': 1})
+          seq_cursor_note = current['notes'][nt]
+          return (current, seq_cursor_note)
+
+      # New note is the highest tone
+      current['notes'].append({'channel': channel, 'note': note_key, 'velocity': current['notes'][notes_len-1]['velocity'], 'duration': 1})
       seq_cursor_note = current['notes'][len(current['notes']) - 1]
       return (current, seq_cursor_note)
 
-    # Insert the note as new score at new note on time
+    # Insert the note as new score at new note-on time
     elif current['time'] > note_on_time:
       seq_score.insert(sc, {'time': note_on_time, 'max_duration': 1, 'notes': [{'channel': channel, 'note': note_key, 'velocity': 127, 'duration': 1}]})
       current = seq_score[sc]
@@ -574,7 +592,7 @@ def sequencer_new_note(channel, note_on_time, note_key):
     # Next note on time
     sc = sc + 1
 
-  # Append the note as new latest note on time
+  # Append the note as new latest note-on time
   seq_score.append({'time': note_on_time, 'max_duration': 1, 'notes': [{'channel': channel, 'note': note_key, 'velocity': 127, 'duration': 1}]})
   current = seq_score[len(seq_score) - 1]
   seq_cursor_note = current['notes'][0]
@@ -614,10 +632,30 @@ def sequencer_timespan(delta):
   seq_show_cursor(1, True, True)
 
 
+# Change a note velocity
+def sequencer_velocity(delta):
+  global seq_cursor_note
+
+  # No note is selected
+  if seq_cursor_note is None:
+    return False
+
+  # Change velocity of a note selected
+  note_data = seq_cursor_note[1]
+  note_data['velocity'] = note_data['velocity'] + delta
+  if note_data['velocity'] < 1:
+    note_data['velocity'] = 1
+  elif note_data['velocity'] > 127:
+    note_data['velocity'] = 127
+
+  return True
+
+
 # Play sequencer score
 def play_sequencer():
   global synth_0, seq_control, seq_channel, seq_score
   global seq_time_cursor, seq_key_cursor
+  global seq_play_time
 
   print('SEQUENCER STARTS.')
   note_off_events = []
@@ -671,8 +709,14 @@ def play_sequencer():
 
   next_note_on = 0
   next_note_off = 0
-  time_cursor = 0
-  seq_time_cursor = 0
+  if seq_play_time[0] < seq_play_time[1]:
+    time_cursor = seq_play_time[0]
+    end_time = seq_play_time[1]
+  else:
+    time_cursor = 0
+    end_time = -1
+   
+  seq_time_cursor = time_cursor
   for score in seq_score:
     next_notes_on = score['time']
     while next_notes_on > time_cursor:
@@ -683,12 +727,17 @@ def play_sequencer():
 
       time.sleep(seq_control['tempo'])
       time_cursor = move_play_cursor(time_cursor)
+      if end_time != -1 and time_cursor >= end_time:
+        break
 
     # Note off
     print('SEQUENCER AT:', time_cursor)
     if len(note_off_events) > 0:
       if note_off_events[0]['time'] == time_cursor:
         sequencer_notes_off()
+
+    if end_time != -1 and time_cursor >= end_time:
+      break
 
     # Notes on
     for note_data in score['notes']:
@@ -699,6 +748,8 @@ def play_sequencer():
 
     time.sleep(seq_control['tempo'])
     time_cursor = move_play_cursor(time_cursor)
+    if end_time != -1 and time_cursor >= end_time:
+      break
 
   # Notes off
   print('SEQUENCER: Notes off process =', len(note_off_events))
@@ -718,6 +769,10 @@ def play_sequencer():
   seq_key_cursor[0] = seq_key_cursor0_bk
   seq_key_cursor[1] = seq_key_cursor1_bk
   seq_show_cursor(seq_edit_track, True, True)
+
+  # Refresh screen
+  sequencer_draw_track(0)
+  sequencer_draw_track(1)
   print('SEQUENCER: Finished.')
 
 
@@ -799,11 +854,81 @@ def sequencer_draw_note(trknum, note_num, note_on_time, note_off_time, disp_mode
   M5.Lcd.drawRect(x, y, w, h, seq_note_color[disp_mode][0])
 
 
+# Draw velocity
+def sequencer_draw_velocity(trknum, channel, note_on_time, notes):
+  global seq_disp_key, seq_disp_time, seq_draw_area, seq_cursor_note
+
+  # Key range to draw
+  key_s = seq_disp_key[trknum][0]
+  key_e = seq_disp_key[trknum][1]
+
+  # Time range to draw
+  time_s = seq_disp_time[0]
+  time_e = seq_disp_time[1]
+
+  # Display coordinates
+  area = seq_draw_area[trknum]
+  xscale = int((area[2] - area[0] + 1) / (time_e - time_s))
+  yscale = int((area[3] - area[1] + 1) / (key_e  - key_s  + 1))
+
+  # Draw velocity bar graph
+  draws = 0
+  for note_data in notes:
+    if note_data['channel'] == channel:
+      # Out of draw area
+      note_num = note_data['note']
+      if note_num < key_s or note_num > key_e:
+        continue
+
+      # Graph color
+      if seq_cursor_note is None:
+        color = 0x888888
+      else:
+        if note_data == seq_cursor_note[1]:
+          color = 0xff4040
+        else:
+          color = 0x888888
+
+      # Draw a bar graph
+      x = area[0] + (note_on_time - time_s) * xscale + draws * 5 + 2
+      y = int((area[3] - area[1] - 2) * note_data['velocity'] / 127)
+      M5.Lcd.fillRect(x, area[3] - y - 1, 3, y, color)
+      draws = draws + 1
+
+# Draw start and end time line to play in sequencer
+def sequencer_draw_playtime(trknum):
+  global seq_play_time, seq_disp_time, seq_draw_area
+
+  # Draw track frame
+  area = seq_draw_area[trknum]
+  x = area[0]
+  y = area[1]
+  xscale = int((area[2] - area[0] + 1) / (seq_disp_time[1] - seq_disp_time[0]))
+
+  # Draw time line
+  M5.Lcd.drawLine(x, y, area[2], y, 0x00ff40)
+  if seq_play_time[0] < seq_play_time[1]:
+    # Play time is on screen
+    if seq_play_time[0] < seq_disp_time[1] and seq_play_time[1] > seq_disp_time[0]:
+      ts = seq_play_time[0] if seq_play_time[0] > seq_disp_time[0] else seq_disp_time[0]
+      te = seq_play_time[1] if seq_play_time[1] < seq_disp_time[1] else seq_disp_time[1]
+      xs = x + (ts - seq_disp_time[0]) * xscale
+      xe = x + (te - seq_disp_time[0]) * xscale
+      M5.Lcd.drawLine(xs, y, xe, y, 0xff40ff)
+  # Play all
+  else:
+    M5.Lcd.drawLine(x, y, area[2], y, 0xff40ff)
+
+
 # Draw sequencer track
 #   trknum: The track number to draw (0 or 1)
 def sequencer_draw_track(trknum):
   global seq_control, seq_track_midi, seq_score, seq_disp_time
   global seq_cursor_note
+  global seq_parm
+
+  # Draw with velocity
+  with_velocity = (seq_parm == SEQUENCER_PARM_VELOCITY)
 
   # Draw track frame
   area = seq_draw_area[trknum]
@@ -819,6 +944,9 @@ def sequencer_draw_track(trknum):
     M5.Lcd.drawLine(x0, y, x0, area[3], color)
   
   M5.Lcd.drawRect(x, y, w, h, 0x00ff40)
+
+  # Draw start and end time to play
+  sequencer_draw_playtime(trknum)
 
   # Draw time span
   time_s = seq_disp_time[0]
@@ -854,6 +982,9 @@ def sequencer_draw_track(trknum):
 
           sequencer_draw_note(trknum, notes_data['note'], note_on_time, note_on_time + notes_data['duration'], color)
 
+      if with_velocity:
+        sequencer_draw_velocity(trknum, channel, note_on_time, score['notes'])
+
     # Note on time is less than draw time but note is in display area
     else:
       for notes_data in score['notes']:
@@ -864,6 +995,9 @@ def sequencer_draw_track(trknum):
             color = SEQ_NOTE_DISP_HIGHLIGHT if score == seq_cursor_note[0] and notes_data == seq_cursor_note[1] else SEQ_NOTE_DISP_NORMAL
 
           sequencer_draw_note(trknum, notes_data['note'], note_on_time, note_on_time + notes_data['duration'], color)
+
+      if with_velocity:
+        sequencer_draw_velocity(trknum, channel, note_on_time, score['notes'])
 
     # Next the time to draw
     draw_time = draw_time + 1
@@ -1851,7 +1985,7 @@ def encoder_read():
   global app_screen_mode
   global seq_control, seq_edit_track, seq_time_cursor, seq_key_cursor, seq_cursor_time, seq_cursor_note
   global seq_file_number, seq_file_ctrl
-  global seq_parm
+  global seq_parm, seq_play_time
 
   # Get a parameter info array and parameter('params') index in the info.
   def get_enc_param_index(idx):
@@ -2283,27 +2417,35 @@ def encoder_read():
 
         # Show cursor
         seq_show_cursor(seq_edit_track, True, True)
-        cursor_note = sequencer_find_note(seq_edit_track, seq_time_cursor, seq_key_cursor[seq_edit_track])
 
         # Find a note on the cursor
+        cursor_note = sequencer_find_note(seq_edit_track, seq_time_cursor, seq_key_cursor[seq_edit_track])
         if not cursor_note is None:
           if not seq_cursor_note is None:
             if cursor_note != seq_cursor_note:
               score = seq_cursor_note[0]
               note_data = seq_cursor_note[1]
-              sequencer_draw_note(seq_edit_track, note_data['note'], score['time'], score['time'] + note_data['duration'], SEQ_NOTE_DISP_NORMAL)
+              if seq_parm != SEQUENCER_PARM_VELOCITY:
+                sequencer_draw_note(seq_edit_track, note_data['note'], score['time'], score['time'] + note_data['duration'], SEQ_NOTE_DISP_NORMAL)
 
           seq_cursor_note = cursor_note
           score = seq_cursor_note[0]
           note_data = seq_cursor_note[1]
-          sequencer_draw_note(seq_edit_track, note_data['note'], score['time'], score['time'] + note_data['duration'], SEQ_NOTE_DISP_HIGHLIGHT)
+          if seq_parm != SEQUENCER_PARM_VELOCITY:
+            sequencer_draw_note(seq_edit_track, note_data['note'], score['time'], score['time'] + note_data['duration'], SEQ_NOTE_DISP_HIGHLIGHT)
+          else:
+            sequencer_draw_track(seq_edit_track)
 
         # The cursor moves away from the selected note 
         elif not seq_cursor_note is None:
           score = seq_cursor_note[0]
           note_data = seq_cursor_note[1]
-          sequencer_draw_note(seq_edit_track, note_data['note'], score['time'], score['time'] + note_data['duration'], SEQ_NOTE_DISP_NORMAL)
-          seq_cursor_note = None
+          if seq_parm != SEQUENCER_PARM_VELOCITY:
+            sequencer_draw_note(seq_edit_track, note_data['note'], score['time'], score['time'] + note_data['duration'], SEQ_NOTE_DISP_NORMAL)
+            seq_cursor_note = None
+          else:
+            seq_cursor_note = None
+            sequencer_draw_track(seq_edit_track)
 
     # Set sequencer note length
     elif enc_menu == ENC_SEQ_NOTE_LEN1 or enc_menu == ENC_SEQ_NOTE_LEN2:
@@ -2347,6 +2489,8 @@ def encoder_read():
     elif enc_menu == ENC_SEQ_PARAMETER1 or enc_menu == ENC_SEQ_PARAMETER2:
       if delta != 0 or slide_switch_change:
         label_seq_parm_name.setText(seq_parameter_names[seq_parm])
+        sequencer_draw_track(0)
+        sequencer_draw_track(1)
 
     # Set sequencer parameter value
     elif enc_menu == ENC_SEQ_CTRL1 or enc_menu == ENC_SEQ_CTRL2:
@@ -2357,6 +2501,25 @@ def encoder_read():
         elif seq_parm == SEQUENCER_PARM_TIMESPAN:
           sequencer_timespan(delta)
 
+        elif seq_parm == SEQUENCER_PARM_VELOCITY:
+          if sequencer_velocity(delta):
+              sequencer_draw_track(seq_edit_track)
+
+        elif seq_parm == SEQUENCER_PARM_PLAYSTART:
+          pt = seq_play_time[0] + delta
+          print('PLAY S:', pt, delta, seq_play_time)
+          if pt >= 0 and pt <= seq_play_time[1]:
+            seq_play_time[0] = pt
+            sequencer_draw_playtime(0)
+            sequencer_draw_playtime(1)
+
+        elif seq_parm == SEQUENCER_PARM_PLAYEND:
+          pt = seq_play_time[1] + delta
+          print('PLAY E:', pt, delta, seq_play_time)
+          if pt >= seq_play_time[0]:
+            seq_play_time[1] = pt
+            sequencer_draw_playtime(0)
+            sequencer_draw_playtime(1)
 
 # Set up the program
 def setup_player():
