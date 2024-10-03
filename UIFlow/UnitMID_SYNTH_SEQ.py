@@ -20,6 +20,11 @@
 #              1.0.1: 10/02/2024
 #                       Velocity editor in Sequencer screen.
 #                       Start and end time setting to play with sequencer.
+#              1.0.2: 10/03/2024
+#                       Insert/Delete time.
+#                       Clear all note (a MIDI channel or all channels)
+#                       Note in a bar/Time resolution
+#                       Play temp for sequencer
 #
 # Copyright (C) Shunsuke Ohira, 2024
 #####################################################################################################
@@ -343,7 +348,7 @@ seq_cursor_note = None              # The score and note data on the cursor (to 
 seq_track_midi = [0,1]              # MIDI channels for the two tracks on the display
 seq_disp_time = [0,12]              # Time span to display on sequencer
 seq_disp_key = [[57,74],[57,74]]    # Key span to display on sequencer
-seq_play_time = [0,8]               # Start and end time to play with sequencer
+seq_play_time = [0,0]               # Start and end time to play with sequencer
 
 # Sequencer file
 SEQ_FILE_LOAD = 0
@@ -354,13 +359,20 @@ seq_file_ctrl = SEQ_FILE_LOAD             # Currnet MIDI IN setting file operati
 
 # Sequencer parameter
 #   Sequencer parameter strings to show
-seq_parameter_names = ['P:M-CH', 'P:TIME', 'P:VELO', 'P:PLYS', 'P:PLYE']
+seq_parameter_names = ['P:M-CH', 'P:TIME', 'C:STR1', 'C:STRA', 'P:VELO', 'P:NBAR', 'C:RESL', 'C:CLR1', 'C:CLRA', 'P:PLYS', 'P:PLYE', 'P:TMPO']
 seq_total_parameters = len(seq_parameter_names)   # Number of seq_parm
 SEQUENCER_PARM_CHANNEL = 0                        # Change a track MIDI channel
 SEQUENCER_PARM_TIMESPAN = 1                       # Change times to display
-SEQUENCER_PARM_VELOCITY = 2                       # Change note velocity
-SEQUENCER_PARM_PLAYSTART = 3                      # Start and end time to play with sequencer
-SEQUENCER_PARM_PLAYEND = 4                        # End time to play with sequencer
+SEQUENCER_PARM_STRETCH_ONE = 2                    # Insert/Delete a time in the current MIDI channel
+SEQUENCER_PARM_STRETCH_ALL = 3                    # Insert/Delete a time in all MIDI channels
+SEQUENCER_PARM_VELOCITY = 4                       # Change note velocity
+SEQUENCER_PARM_NOTES_BAR = 5                      # Change number of notes in a bar
+SEQUENCER_PARM_RESOLUTION = 6                     # Resolution up
+SEQUENCER_PARM_CLEAR_ONE = 7                      # Clear all notes in the current MIDI channel
+SEQUENCER_PARM_CLEAR_ALL = 8                      # Clear all notes in all MIDI channels
+SEQUENCER_PARM_PLAYSTART = 9                      # Start and end time to play with sequencer
+SEQUENCER_PARM_PLAYEND = 10                       # End time to play with sequencer
+SEQUENCER_PARM_TEMPO = 11                         # Change tempo to play sequencer
 seq_parm = SEQUENCER_PARM_CHANNEL                 # Current sequencer parameter index (= initial)
 
 # Sequencer channel data
@@ -559,7 +571,7 @@ def sequencer_delete_note(score, note_data):
 
 
 # Add new note
-def sequencer_new_note(channel, note_on_time, note_key):
+def sequencer_new_note(channel, note_on_time, note_key, velocity = -1, duration = 1):
   global seq_score, seq_cursor_note
 
   sc = 0
@@ -573,18 +585,24 @@ def sequencer_new_note(channel, note_on_time, note_key):
       notes_len = len(current['notes'])
       for nt in range(notes_len):
         if current['notes'][nt]['note'] > note_key:
-          current['notes'].insert(nt, {'channel': channel, 'note': note_key, 'velocity': current['notes'][nt]['velocity'], 'duration': 1})
+          current['notes'].insert(nt, {'channel': channel, 'note': note_key, 'velocity': max(velocity, current['notes'][nt]['velocity']), 'duration': duration})
           seq_cursor_note = current['notes'][nt]
+          if duration > seq_score[sc]['max_duration']:
+            seq_score[sc]['max_duration'] = duration
+
           return (current, seq_cursor_note)
 
       # New note is the highest tone
-      current['notes'].append({'channel': channel, 'note': note_key, 'velocity': current['notes'][notes_len-1]['velocity'], 'duration': 1})
+      current['notes'].append({'channel': channel, 'note': note_key, 'velocity': max(velocity, current['notes'][notes_len-1]['velocity']), 'duration': duration})
       seq_cursor_note = current['notes'][len(current['notes']) - 1]
+      if duration > seq_score[sc]['max_duration']:
+        seq_score[sc]['max_duration'] = duration
+
       return (current, seq_cursor_note)
 
     # Insert the note as new score at new note-on time
     elif current['time'] > note_on_time:
-      seq_score.insert(sc, {'time': note_on_time, 'max_duration': 1, 'notes': [{'channel': channel, 'note': note_key, 'velocity': 127, 'duration': 1}]})
+      seq_score.insert(sc, {'time': note_on_time, 'max_duration': duration, 'notes': [{'channel': channel, 'note': note_key, 'velocity': max(velocity, 127), 'duration': duration}]})
       current = seq_score[sc]
       seq_cursor_note = current['notes'][0]
       return (current, seq_cursor_note)
@@ -593,7 +611,7 @@ def sequencer_new_note(channel, note_on_time, note_key):
     sc = sc + 1
 
   # Append the note as new latest note-on time
-  seq_score.append({'time': note_on_time, 'max_duration': 1, 'notes': [{'channel': channel, 'note': note_key, 'velocity': 127, 'duration': 1}]})
+  seq_score.append({'time': note_on_time, 'max_duration': duration, 'notes': [{'channel': channel, 'note': note_key, 'velocity': max(velocity, 127), 'duration': duration}]})
   current = seq_score[len(seq_score) - 1]
   seq_cursor_note = current['notes'][0]
   return (current, seq_cursor_note)
@@ -649,6 +667,120 @@ def sequencer_velocity(delta):
     note_data['velocity'] = 127
 
   return True
+
+
+# Insert time at the time cursor on a MIDI channel
+def sequencer_insert_time(channel, time_cursor, ins_times):
+  global seq_score
+
+  affected = False
+  for sc_index in list(range(len(seq_score)-1,-1,-1)):
+    score = seq_score[sc_index]
+
+    # Note-on time is equal or larger than the origin time to insert --> move forward
+    if score['time'] >= time_cursor:
+      note_on_time = score['time'] + ins_times
+      to_delete = []
+      for note_data in score['notes']:
+        if note_data['channel'] == channel:
+          # Delete a note
+          to_delete.append(note_data)
+
+          # Move the note as new note
+          sequencer_new_note(channel, note_on_time, note_data['note'], note_data['velocity'], note_data['duration'])
+          affected = True
+
+      # Delete notes moved
+      for note_data in to_delete:
+        sequencer_delete_note(score, note_data)
+
+    # Note-on time is less than the origin time to insert
+    else:
+      # Notes over the origin time to insert --> stretch duration toward forward
+      # Not include note-off time
+      if score['time'] + score['max_duration'] > time_cursor:
+        for note_data in score['notes']:
+          if note_data['channel'] == channel:
+            if score['time'] + note_data['duration'] > time_cursor:
+              note_data['duration'] = note_data['duration'] + ins_times
+              affected = True
+
+  return affected
+
+
+# Delete time at the time cursor on the all MIDI channels
+def sequencer_delete_time(channel, time_cursor, del_times):
+  global seq_score
+
+  # Can not delete
+  if time_cursor <= 0:
+    return False
+  
+  # Adjust times to delete
+  times_to_delete = time_cursor - del_times
+  if times_to_delete < 0:
+    del_times = time_cursor
+
+  affected = False
+  for score in seq_score:
+    note_on_time = score['time']
+
+    # Note-on time is equal or larger than the delete time
+    if note_on_time >= time_cursor:
+      to_delete = []
+      for note_data in score['notes']:
+        if note_data['channel'] == channel:
+          affected = True
+
+          # Delete a note
+          to_delete.append(note_data)
+
+          # Move the note as new note
+          sequencer_new_note(channel, note_on_time - del_times, note_data['note'], note_data['velocity'], note_data['duration'])
+
+      # Delete notes moved
+      for note_data in to_delete:
+        sequencer_delete_note(score, note_data)
+
+    # Note-on time is less than the delete time, and there are some notes acrossing the delete time
+    elif note_on_time + score['max_duration'] >= time_cursor:
+      to_delete = []
+      for note_data in score['notes']:
+        if note_data['channel'] == channel:
+
+          # Accross the time range to delete
+          if note_on_time + note_data['duration'] >= time_cursor - del_times:
+            affected = True
+            note_data['duration'] = note_data['duration'] - del_times
+
+            # Zero length note
+            if note_data['duration'] <= 0:
+              to_delete.append(note_data)
+
+      # Delete notes without duration
+      for note_data in to_delete:
+        sequencer_delete_note(score, note_data)
+
+  return affected
+
+
+# Up or Down time resolution
+def sequencer_resolution(res_up):
+  global seq_score
+
+  # Reolution up
+  if res_up:
+    for score in seq_score:
+      score['time'] = score['time'] * 2
+
+  # Resolution down
+  else:
+    for score in seq_score:
+      if score['time'] % 2 != 0:
+        return
+
+    for score in seq_score:
+      score['time'] = int(score['time'] / 2)
 
 
 # Play sequencer score
@@ -1985,7 +2117,7 @@ def encoder_read():
   global app_screen_mode
   global seq_control, seq_edit_track, seq_time_cursor, seq_key_cursor, seq_cursor_time, seq_cursor_note
   global seq_file_number, seq_file_ctrl
-  global seq_parm, seq_play_time
+  global seq_parm, seq_play_time, seq_score
 
   # Get a parameter info array and parameter('params') index in the info.
   def get_enc_param_index(idx):
@@ -2408,11 +2540,13 @@ def encoder_read():
           if seq_key_cursor[seq_edit_track] < seq_disp_key[seq_edit_track][0]:
             seq_disp_key[seq_edit_track][0] = seq_disp_key[seq_edit_track][0] - 1
             seq_disp_key[seq_edit_track][1] = seq_disp_key[seq_edit_track][1] - 1
+            sequencer_draw_keyboard(seq_edit_track)
             sequencer_draw_track(seq_edit_track)
 
           elif seq_key_cursor[seq_edit_track] > seq_disp_key[seq_edit_track][1]:
             seq_disp_key[seq_edit_track][0] = seq_disp_key[seq_edit_track][0] + 1
             seq_disp_key[seq_edit_track][1] = seq_disp_key[seq_edit_track][1] + 1
+            sequencer_draw_keyboard(seq_edit_track)
             sequencer_draw_track(seq_edit_track)
 
         # Show cursor
@@ -2495,16 +2629,20 @@ def encoder_read():
     # Set sequencer parameter value
     elif enc_menu == ENC_SEQ_CTRL1 or enc_menu == ENC_SEQ_CTRL2:
       if delta != 0 or slide_switch_change:
+        # Change MIDI channel of the current track
         if   seq_parm == SEQUENCER_PARM_CHANNEL:
           sequencer_change_midi_channel(delta)
 
+        # Change time span
         elif seq_parm == SEQUENCER_PARM_TIMESPAN:
           sequencer_timespan(delta)
 
+        # Change velocity of the note selected
         elif seq_parm == SEQUENCER_PARM_VELOCITY:
           if sequencer_velocity(delta):
               sequencer_draw_track(seq_edit_track)
 
+        # Change start time to begining play
         elif seq_parm == SEQUENCER_PARM_PLAYSTART:
           pt = seq_play_time[0] + delta
           print('PLAY S:', pt, delta, seq_play_time)
@@ -2513,6 +2651,7 @@ def encoder_read():
             sequencer_draw_playtime(0)
             sequencer_draw_playtime(1)
 
+        # Change end time to finish play
         elif seq_parm == SEQUENCER_PARM_PLAYEND:
           pt = seq_play_time[1] + delta
           print('PLAY E:', pt, delta, seq_play_time)
@@ -2520,6 +2659,111 @@ def encoder_read():
             seq_play_time[1] = pt
             sequencer_draw_playtime(0)
             sequencer_draw_playtime(1)
+
+        # Insert/Delete time at the time cursor on the current MIDI channel only
+        elif seq_parm == SEQUENCER_PARM_STRETCH_ONE:
+          affected = False
+
+          # Insert
+          if delta > 0:
+            affected = sequencer_insert_time(seq_track_midi[seq_edit_track], seq_time_cursor, delta)
+          # Delete
+          elif delta < 0:
+            affected = sequencer_delete_time(seq_track_midi[seq_edit_track], seq_time_cursor, -delta)
+
+          # Refresh screen
+          if affected:
+            seq_show_cursor(seq_edit_track, False, False)
+            seq_time_cursor = seq_time_cursor + delta
+            if seq_time_cursor < 0:
+              seq_time_cursor = 0
+
+            seq_cursor_note = sequencer_find_note(seq_edit_track, seq_time_cursor, seq_key_cursor[seq_edit_track])
+            sequencer_draw_track(seq_edit_track)
+            seq_show_cursor(seq_edit_track, True, True)
+
+        # Insert/Delete time at the time cursor on the all MIDI channels
+        elif seq_parm == SEQUENCER_PARM_STRETCH_ALL:
+          affected = False
+
+          # Insert
+          if delta > 0:
+            for ch in range(16):
+              affected = sequencer_insert_time(ch, seq_time_cursor, delta) or affected
+          # Delete
+          elif delta < 0:
+            for ch in range(16):
+              affected = sequencer_delete_time(ch, seq_time_cursor, -delta) or affected
+
+          # Refresh screen
+          if affected:
+            seq_show_cursor(0, False, False)
+            seq_show_cursor(1, False, False)
+            seq_time_cursor = seq_time_cursor + delta
+            if seq_time_cursor < 0:
+              seq_time_cursor = 0
+
+            seq_cursor_note = sequencer_find_note(seq_edit_track, seq_time_cursor, seq_key_cursor[seq_edit_track])
+            sequencer_draw_track(0)
+            sequencer_draw_track(1)
+            seq_show_cursor(0, True, True)
+            seq_show_cursor(1, True, True)
+
+        # Clear all notes in the current MIDI channel
+        elif seq_parm == SEQUENCER_PARM_CLEAR_ONE:
+          if delta != 0:
+            to_delete = []
+            for score in seq_score:
+              for note_data in score['notes']:
+                if note_data['channel'] == seq_track_midi[seq_edit_track]:
+                  to_delete.append((score, note_data))
+              
+            for del_note in to_delete:
+              sequencer_delete_note(*del_note)
+
+            seq_cursor_note = None
+            sequencer_draw_track(seq_edit_track)
+            sequencer_draw_playtime(seq_edit_track)
+
+        # Clear all notes in the all MIDI channel
+        elif seq_parm == SEQUENCER_PARM_CLEAR_ALL:
+          if delta != 0:
+            seq_score = []
+            seq_cursor_note = None
+            sequencer_draw_track(0)
+            sequencer_draw_track(1)
+            sequencer_draw_playtime(0)
+            sequencer_draw_playtime(1)
+
+        # Change number of notes in a bar
+        elif seq_parm == SEQUENCER_PARM_NOTES_BAR:
+          if delta != 0:
+            seq_control['time_per_bar'] = seq_control['time_per_bar'] + delta
+            if seq_control['time_per_bar'] < 2:
+              seq_control['time_per_bar'] = 2
+
+            sequencer_draw_track(0)
+            sequencer_draw_track(1)
+
+        # Resolution up
+        elif seq_parm == SEQUENCER_PARM_RESOLUTION:
+          if delta != 0:
+            sequencer_resolution(delta > 0)
+
+            seq_show_cursor(0, False, False)
+            seq_show_cursor(1, False, False)
+            seq_cursor_note = sequencer_find_note(seq_edit_track, seq_time_cursor, seq_key_cursor[seq_edit_track])
+            sequencer_draw_track(0)
+            sequencer_draw_track(1)
+            seq_show_cursor(0, True, True)
+            seq_show_cursor(1, True, True)
+
+        # Change number of notes in a bar
+        elif seq_parm == SEQUENCER_PARM_TEMPO:
+          if delta != 0:
+            seq_control['tempo'] = seq_control['tempo'] - delta * 0.1
+            if seq_control['tempo'] < 0.1:
+              seq_control['tempo'] = 0.1
 
 # Set up the program
 def setup_player():
