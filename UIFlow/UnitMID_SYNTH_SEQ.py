@@ -786,7 +786,7 @@ def sequencer_resolution(res_up):
 # Play sequencer score
 def play_sequencer():
   global synth_0, seq_control, seq_channel, seq_score
-  global seq_time_cursor, seq_key_cursor
+  global seq_time_cursor, seq_key_cursor, seq_disp_time
   global seq_play_time
 
   print('SEQUENCER STARTS.')
@@ -827,6 +827,15 @@ def play_sequencer():
     seq_show_cursor(seq_edit_track, False, False)
     tc = tc + 1
     seq_time_cursor = tc
+
+    # Slide score
+    if seq_time_cursor < seq_disp_time[0] or seq_time_cursor > seq_disp_time[1]:
+      width = seq_disp_time[1] - seq_disp_time[0]
+      seq_disp_time[0] = seq_time_cursor
+      seq_disp_time[1] = seq_disp_time[0] + width
+      sequencer_draw_track(0)
+      sequencer_draw_track(1)
+
     seq_show_cursor(seq_edit_track, True, False)
     return tc
 
@@ -837,6 +846,8 @@ def play_sequencer():
   seq_time_cursor_bk = seq_time_cursor
   seq_key_cursor0_bk = seq_key_cursor[0]
   seq_key_cursor1_bk = seq_key_cursor[1]
+  seq_disp_time0_bk  = seq_disp_time[0]
+  seq_disp_time1_bk  = seq_disp_time[1]
   seq_show_cursor(seq_edit_track, False, False)
 
   next_note_on = 0
@@ -850,6 +861,7 @@ def play_sequencer():
    
   seq_time_cursor = time_cursor
   for score in seq_score:
+    # Play
     next_notes_on = score['time']
     while next_notes_on > time_cursor:
       print('SEQUENCER AT:', time_cursor)
@@ -900,6 +912,10 @@ def play_sequencer():
   seq_time_cursor = seq_time_cursor_bk
   seq_key_cursor[0] = seq_key_cursor0_bk
   seq_key_cursor[1] = seq_key_cursor1_bk
+  seq_disp_time[0] = seq_disp_time0_bk
+  seq_disp_time[1] = seq_disp_time1_bk
+  sequencer_draw_track(0)
+  sequencer_draw_track(1)
   seq_show_cursor(seq_edit_track, True, True)
 
   # Refresh screen
@@ -924,7 +940,8 @@ def seq_show_cursor(edit_track, disp_time, disp_key):
       xscale = int((area[2] - area[0] + 1) / (seq_disp_time[1] - seq_disp_time[0]))
 
       color = 0xffff40 if disp_time else 0x222222
-      M5.Lcd.fillRect(x + seq_time_cursor * xscale - 3, y - 3, 6, 3, color)
+#      M5.Lcd.fillRect(x + seq_time_cursor * xscale - 3, y - 3, 6, 3, color)
+      M5.Lcd.fillRect(x + (seq_time_cursor - seq_disp_time[0]) * xscale - 3, y - 3, 6, 3, color)
 
   # Draw key cursor
   area = seq_draw_area[edit_track]
