@@ -25,6 +25,10 @@
 #                       Clear all note (a MIDI channel or all channels)
 #                       Note in a bar/Time resolution
 #                       Play temp for sequencer
+#              1.1.0: 10/04/2024
+#                       PAUSE/STOP for sequencer play.
+#                       Sequencer GM program settings.
+#                       Save/Load all sequencer settings.
 #
 # Copyright (C) Shunsuke Ohira, 2024
 #####################################################################################################
@@ -338,16 +342,22 @@ ENC_SEQ_SCREEN2     = 107   # not available
 ENC_SEQ_MASTER_VOL2 = 108   # Change master volume
 
 # Sequencer controls
+#   'tempo': Sleep time every sequencer times
+#   'time_per_bar': Times (number of notes) per bar
+#   'disp_time': Time span to display on sequencer
+#   'disp_key': Key spans to display on sequencer each track
+#   'time_cursor': Time cursor to edit note
+#   'key_cursor': Key cursors to edit note each track
+#   'program': Program number for each MIDI channel
+seq_control = {'tempo': 0.5, 'time_per_bar': 4, 'disp_time': [0,12], 'disp_key': [[57,74],[57,74]], 'time_cursor': 0, 'key_cursor': [60,60], 'program':[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15], 'gmbank':[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}
+
+# Sequencer internal parameters
 SEQ_FILE_MAX = 1000
-seq_control = {'tempo': 0.5, 'time_per_bar': 4}        # Sleep time every sequencer times
 seq_edit_track = 0                  # The track number to edit (0 or 1, 0 is Track1 as display)
-seq_time_cursor = 0                 # Time cursor to edit note
-seq_key_cursor = [60,60]            # Time cursor to edit note for each track
+seq_control['key_cursor'] = [60,60]            # Time cursor to edit note for each track
 seq_cursor_time = True              # True: Move time cursor / False: Move key cursor
 seq_cursor_note = None              # The score and note data on the cursor (to highlite the note)
 seq_track_midi = [0,1]              # MIDI channels for the two tracks on the display
-seq_disp_time = [0,12]              # Time span to display on sequencer
-seq_disp_key = [[57,74],[57,74]]    # Key span to display on sequencer
 seq_play_time = [0,0]               # Start and end time to play with sequencer
 
 # Sequencer file
@@ -359,20 +369,21 @@ seq_file_ctrl = SEQ_FILE_LOAD             # Currnet MIDI IN setting file operati
 
 # Sequencer parameter
 #   Sequencer parameter strings to show
-seq_parameter_names = ['P:M-CH', 'P:TIME', 'C:STR1', 'C:STRA', 'P:VELO', 'P:NBAR', 'C:RESL', 'C:CLR1', 'C:CLRA', 'P:PLYS', 'P:PLYE', 'P:TMPO']
+seq_parameter_names = ['MDCH', 'MDPG', 'TIME', 'STR1', 'STRA', 'VELO', 'NBAR', 'RESL', 'CLR1', 'CLRA', 'PLYS', 'PLYE', 'TMP']
 seq_total_parameters = len(seq_parameter_names)   # Number of seq_parm
 SEQUENCER_PARM_CHANNEL = 0                        # Change a track MIDI channel
-SEQUENCER_PARM_TIMESPAN = 1                       # Change times to display
-SEQUENCER_PARM_STRETCH_ONE = 2                    # Insert/Delete a time in the current MIDI channel
-SEQUENCER_PARM_STRETCH_ALL = 3                    # Insert/Delete a time in all MIDI channels
-SEQUENCER_PARM_VELOCITY = 4                       # Change note velocity
-SEQUENCER_PARM_NOTES_BAR = 5                      # Change number of notes in a bar
-SEQUENCER_PARM_RESOLUTION = 6                     # Resolution up
-SEQUENCER_PARM_CLEAR_ONE = 7                      # Clear all notes in the current MIDI channel
-SEQUENCER_PARM_CLEAR_ALL = 8                      # Clear all notes in all MIDI channels
-SEQUENCER_PARM_PLAYSTART = 9                      # Start and end time to play with sequencer
-SEQUENCER_PARM_PLAYEND = 10                       # End time to play with sequencer
-SEQUENCER_PARM_TEMPO = 11                         # Change tempo to play sequencer
+SEQUENCER_PARM_PROGRAM = 1                        # Change program of MIDI channel
+SEQUENCER_PARM_TIMESPAN = 2                       # Change times to display
+SEQUENCER_PARM_STRETCH_ONE = 3                    # Insert/Delete a time in the current MIDI channel
+SEQUENCER_PARM_STRETCH_ALL = 4                    # Insert/Delete a time in all MIDI channels
+SEQUENCER_PARM_VELOCITY = 5                       # Change note velocity
+SEQUENCER_PARM_NOTES_BAR = 6                      # Change number of notes in a bar
+SEQUENCER_PARM_RESOLUTION = 7                     # Resolution up
+SEQUENCER_PARM_CLEAR_ONE = 8                      # Clear all notes in the current MIDI channel
+SEQUENCER_PARM_CLEAR_ALL = 9                      # Clear all notes in all MIDI channels
+SEQUENCER_PARM_PLAYSTART = 10                      # Start and end time to play with sequencer
+SEQUENCER_PARM_PLAYEND = 11                       # End time to play with sequencer
+SEQUENCER_PARM_TEMPO = 12                         # Change tempo to play sequencer
 seq_parm = SEQUENCER_PARM_CHANNEL                 # Current sequencer parameter index (= initial)
 
 # Sequencer channel data
@@ -411,6 +422,9 @@ label_seq_file_op = None
 label_seq_time = None
 label_seq_master_volume = None
 label_seq_parm_name = None
+label_seq_parm_value = None
+label_seq_program1 = None
+label_seq_program2 = None
 
 # Display mode to draw note on sequencer
 SEQ_NOTE_DISP_NORMAL = 0
@@ -423,7 +437,7 @@ def setup_sequencer():
   global seq_channel, seq_score
   global title_seq_track1, title_seq_track2, title_seq_file, title_seq_time, title_seq_master_volume
   global label_seq_track1, label_seq_track2, label_seq_file, label_seq_file_op, label_seq_time, label_seq_master_volume
-  global label_seq_key1, label_seq_key2, label_seq_parm_name
+  global label_seq_key1, label_seq_key2, label_seq_parm_name, label_seq_parm_value, label_seq_program1, label_seq_program2
 
   # Initialize the sequencer channels
   seq_channel = []
@@ -440,8 +454,8 @@ def setup_sequencer():
   title_seq_time          = Widgets.Label('title_seq_time', 100, 0, 1.0, 0x00ccff, 0x222222, Widgets.FONTS.DejaVu18)
   title_seq_master_volume = Widgets.Label('title_seq_master_volume', 230, 0, 1.0, 0x00ccff, 0x222222, Widgets.FONTS.DejaVu18)
 
-  title_seq_track1.setText('CH:')
-  title_seq_track2.setText('CH:')
+  title_seq_track1.setText('CH')
+  title_seq_track2.setText('CH')
   title_seq_file.setText('NO:')
   title_seq_time.setText('T/B:')
   title_seq_master_volume.setText('VOL:')
@@ -453,27 +467,42 @@ def setup_sequencer():
   title_seq_master_volume.setVisible(False)
 
   # SEQUENCER data labels
-  label_seq_track1        = Widgets.Label('label_seq_track1', 40, 20, 1.0, 0x00ccff, 0x222222, Widgets.FONTS.DejaVu18)
-  label_seq_track2        = Widgets.Label('label_seq_track2', 40, 131, 1.0, 0x00ccff, 0x222222, Widgets.FONTS.DejaVu18)
-  label_seq_key1          = Widgets.Label('label_seq_key1', 70, 20, 1.0, 0x00ccff, 0x222222, Widgets.FONTS.DejaVu18)
-  label_seq_key2          = Widgets.Label('label_seq_key2', 70, 131, 1.0, 0x00ccff, 0x222222, Widgets.FONTS.DejaVu18)
-  label_seq_file          = Widgets.Label('label_seq_file', 40, 0, 1.0, 0x00ccff, 0x222222, Widgets.FONTS.DejaVu18)
+  label_seq_track1        = Widgets.Label('label_seq_track1', 30, 20, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+  label_seq_track2        = Widgets.Label('label_seq_track2', 30, 131, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+  label_seq_key1          = Widgets.Label('label_seq_key1', 57, 20, 1.0, 0x00ccff, 0x222222, Widgets.FONTS.DejaVu18)
+  label_seq_key2          = Widgets.Label('label_seq_key2', 57, 131, 1.0, 0x00ccff, 0x222222, Widgets.FONTS.DejaVu18)
+  label_seq_file          = Widgets.Label('label_seq_file', 40, 0, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
   label_seq_file_op       = Widgets.Label('label_seq_file_op', 80, 0, 1.0, 0x00ccff, 0x222222, Widgets.FONTS.DejaVu18)
-  label_seq_time          = Widgets.Label('label_seq_time', 140, 0, 1.0, 0x00ccff, 0x222222, Widgets.FONTS.DejaVu18)
-  label_seq_master_volume = Widgets.Label('label_seq_master_volume', 280, 0, 1.0, 0x00ccff, 0x222222, Widgets.FONTS.DejaVu18)
-  label_seq_parm_name     = Widgets.Label('label_seq_parm_name', 230, 20, 1.0, 0x00ccff, 0x222222, Widgets.FONTS.DejaVu18)
+  label_seq_time          = Widgets.Label('label_seq_time', 140, 0, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+  label_seq_master_volume = Widgets.Label('label_seq_master_volume', 280, 0, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+  label_seq_parm_name     = Widgets.Label('label_seq_parm_name', 215, 20, 1.0, 0x00ccff, 0x222222, Widgets.FONTS.DejaVu18)
+  label_seq_parm_value    = Widgets.Label('label_seq_parm_value', 280, 20, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+  label_seq_program1      = Widgets.Label('label_seq_program1', 100, 20, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+  label_seq_program2      = Widgets.Label('label_seq_program2', 100, 131, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
 
   label_seq_track1.setText('{:02d}'.format(seq_track_midi[0]+1))
   label_seq_track2.setText('{:02d}'.format(seq_track_midi[1]+1))
-  label_seq_key1.setText(seqencer_key_name(seq_key_cursor[0]))
+  label_seq_key1.setText(seqencer_key_name(seq_control['key_cursor'][0]))
   label_seq_key1.setColor(0xff4040 if seq_edit_track == 0 else 0x00ccff)
-  label_seq_key2.setText(seqencer_key_name(seq_key_cursor[1]))
+  label_seq_key2.setText(seqencer_key_name(seq_control['key_cursor'][1]))
   label_seq_key2.setColor(0xff4040 if seq_edit_track == 1 else 0x00ccff)
   label_seq_file.setText('{:03d}'.format(seq_file_number))
   label_seq_file_op.setText('L' if seq_file_ctrl == SEQ_FILE_LOAD else 'S')
-  label_seq_time.setText('{:03d}/{:03d}'.format(seq_time_cursor,int(seq_time_cursor/seq_control['time_per_bar']) + 1))
+  label_seq_time.setText('{:03d}/{:03d}'.format(seq_control['time_cursor'],int(seq_control['time_cursor']/seq_control['time_per_bar']) + 1))
   label_seq_master_volume.setText('{:02d}'.format(master_volume))
+
+  ch = seq_track_midi[0]
+  prg = get_gm_program_name(seq_control['gmbank'][ch], seq_control['program'][ch])
+  prg = prg[:9]
+  label_seq_program1.setText(prg)
+
+  ch = seq_track_midi[1]
+  prg = get_gm_program_name(seq_control['gmbank'][ch], seq_control['program'][ch])
+  prg = prg[:9]
+  label_seq_program2.setText(prg)
+  
   label_seq_parm_name.setText(seq_parameter_names[seq_parm])
+  label_seq_parm_value.setText('')
 
   label_seq_track1.setVisible(False)
   label_seq_track2.setVisible(False)
@@ -490,14 +519,14 @@ def setup_sequencer():
 
 # Save sequencer file
 def sequencer_save_file():
-  global seq_score, seq_file_path, seq_file_number
+  global seq_control, seq_score, seq_file_path, seq_file_number
 
   # Write MIDI IN settings as JSON file
   fpath = seq_file_path + 'SEQSC{:0=3d}.json'.format(seq_file_number)
   try:
     print('SAVE SEQ:', fpath)
     with open(fpath, 'w') as f:
-      json.dump(seq_score, f)
+      json.dump({'control': seq_control, 'score': seq_score}, f)
 
     f.close()
     print('SAVED')
@@ -508,23 +537,47 @@ def sequencer_save_file():
 
 # Load sequencer file
 def sequencer_load_file():
-  global seq_score, seq_cursor_note, seq_file_path, seq_file_number
+  global seq_control, seq_score, seq_cursor_note, seq_file_path, seq_file_number
 
   # Read MIDI IN settings JSON file
   rdjson = None
   fpath = seq_file_path + 'SEQSC{:0=3d}.json'.format(seq_file_number)
   try:
     with open(fpath, 'r') as f:
-      seq_score = json.load(f)
+      seq_data = json.load(f)
 
     f.close()
 
-    seq_cursor_note = sequencer_find_note(seq_edit_track, seq_time_cursor, seq_key_cursor[seq_edit_track])
+    seq_show_cursor(0, False, False)
+    seq_show_cursor(1, False, False)
+
+    seq_score = seq_data['score']
+    for ky in seq_data['control'].keys():
+      seq_control[ky] = seq_data['control'][ky]
+
+    seq_cursor_note = sequencer_find_note(seq_edit_track, seq_control['time_cursor'], seq_control['key_cursor'][seq_edit_track])
+    sequencer_draw_keyboard(0)
+    sequencer_draw_keyboard(1)
     sequencer_draw_track(0)
     sequencer_draw_track(1)
+    sequencer_draw_playtime(0)
+    sequencer_draw_playtime(1)
+    seq_show_cursor(0, True, True)
+    seq_show_cursor(1, True, True)
+
+    for trk in range(2):
+      ch = seq_track_midi[trk]
+      prg = get_gm_program_name(seq_control['gmbank'][ch], seq_control['program'][ch])
+      prg = prg[:9]
+      if trk == 0:
+        label_seq_program1.setText(prg)
+      else:
+        label_seq_program2.setText(prg)
+
+      send_all_sequencer_settings()
 
   except Exception as e:
-    print('SEQUENCER FILE WRITE ERROR:', e)
+    print('SEQUENCER FILE READ ERROR:', e)
 
 
 # Get key name of key number
@@ -627,23 +680,29 @@ def sequencer_change_midi_channel(delta):
   seq_show_cursor(seq_edit_track, False, False)
   sequencer_draw_track(seq_edit_track)
   seq_show_cursor(seq_edit_track, True, True)
+
+  prg = get_gm_program_name(seq_control['gmbank'][channel], seq_control['program'][channel])
+  prg = prg[:9]
+
   if   seq_edit_track == 0:
     label_seq_track1.setText('{:02d}'.format(seq_track_midi[0]+1))
+    label_seq_program1.setText(prg)
   elif seq_edit_track == 1:
     label_seq_track2.setText('{:02d}'.format(seq_track_midi[1]+1))
+    label_seq_program2.setText(prg)
 
 
 # Change time span to display score
 def sequencer_timespan(delta):
-  global seq_disp_time
+  global seq_control
 
-  end = seq_disp_time[1] + delta
-  if end - seq_disp_time[0] <= 3:
+  end = seq_control['disp_time'][1] + delta
+  if end - seq_control['disp_time'][0] <= 3:
     return
   
   seq_show_cursor(0, False, False)
   seq_show_cursor(1, False, False)
-  seq_disp_time[1] = end
+  seq_control['disp_time'][1] = end
   sequencer_draw_track(0)
   sequencer_draw_track(1)
   seq_show_cursor(0, True, True)
@@ -667,7 +726,6 @@ def sequencer_velocity(delta):
     note_data['velocity'] = 127
 
   return True
-
 
 # Insert time at the time cursor on a MIDI channel
 def sequencer_insert_time(channel, time_cursor, ins_times):
@@ -786,7 +844,7 @@ def sequencer_resolution(res_up):
 # Play sequencer score
 def play_sequencer():
   global synth_0, seq_control, seq_channel, seq_score
-  global seq_time_cursor, seq_key_cursor, seq_disp_time
+  global seq_control
   global seq_play_time
 
   print('SEQUENCER STARTS.')
@@ -822,17 +880,17 @@ def play_sequencer():
 
   # Move play cursor
   def move_play_cursor(tc):
-    global seq_time_cursor
+    global seq_control, seq_control
 
     seq_show_cursor(seq_edit_track, False, False)
     tc = tc + 1
-    seq_time_cursor = tc
+    seq_control['time_cursor'] = tc
 
     # Slide score
-    if seq_time_cursor < seq_disp_time[0] or seq_time_cursor > seq_disp_time[1]:
-      width = seq_disp_time[1] - seq_disp_time[0]
-      seq_disp_time[0] = seq_time_cursor
-      seq_disp_time[1] = seq_disp_time[0] + width
+    if seq_control['time_cursor'] < seq_control['disp_time'][0] or seq_control['time_cursor'] > seq_control['disp_time'][1]:
+      width = seq_control['disp_time'][1] - seq_control['disp_time'][0]
+      seq_control['disp_time'][0] = seq_control['time_cursor']
+      seq_control['disp_time'][1] = seq_control['disp_time'][0] + width
       sequencer_draw_track(0)
       sequencer_draw_track(1)
 
@@ -843,24 +901,68 @@ def play_sequencer():
   ##### CODE: play_sequencer
 
   # Backup the cursor position
-  seq_time_cursor_bk = seq_time_cursor
-  seq_key_cursor0_bk = seq_key_cursor[0]
-  seq_key_cursor1_bk = seq_key_cursor[1]
-  seq_disp_time0_bk  = seq_disp_time[0]
-  seq_disp_time1_bk  = seq_disp_time[1]
+  time_cursor_bk = seq_control['time_cursor']
+  key_cursor0_bk = seq_control['key_cursor'][0]
+  key_cursor1_bk = seq_control['key_cursor'][1]
+  seq_disp_time0_bk  = seq_control['disp_time'][0]
+  seq_disp_time1_bk  = seq_control['disp_time'][1]
   seq_show_cursor(seq_edit_track, False, False)
 
+  # Play parameter
   next_note_on = 0
   next_note_off = 0
-  if seq_play_time[0] < seq_play_time[1]:
-    time_cursor = seq_play_time[0]
-    end_time = seq_play_time[1]
-  else:
-    time_cursor = 0
-    end_time = -1
-   
-  seq_time_cursor = time_cursor
+  time_cursor = seq_play_time[0]
+  end_time = seq_play_time[1] if seq_play_time[0] < seq_play_time[1] else -1
+
+  # Wait for the play button turning off 
+  scan_enc_channel = ENC_SEQ_SET1 % 10
+  while encoder8_0.get_button_status(scan_enc_channel) == False:
+    time.sleep(0.1)
+
+  # Sequencer play loop
+  seq_control['time_cursor'] = time_cursor
   for score in seq_score:
+
+    # Scan stop button
+    if encoder8_0.get_button_status(scan_enc_channel) == False:
+
+      # Stop sound
+      encoder8_0.set_led_rgb(scan_enc_channel, 0x40ff40)
+      synth_0.set_master_volume(0)
+
+      # Wait for releasing the button
+      count = 0
+      while encoder8_0.get_button_status(scan_enc_channel) == False:
+        time.sleep(0.1)
+        count = count + 1
+        if count >= 10:
+          encoder8_0.set_led_rgb(scan_enc_channel, 0xff4040)
+
+      # Stop
+      if count >= 10:
+        encoder8_0.set_led_rgb(scan_enc_channel, 0x000000)
+        break
+
+      # Pause
+      encoder8_0.set_led_rgb(scan_enc_channel, 0xffff00)
+      while encoder8_0.get_button_status(scan_enc_channel) == True:
+        time.sleep(0.1)
+
+      count = 0
+      while encoder8_0.get_button_status(scan_enc_channel) == False:
+        time.sleep(0.1)
+        count = count + 1
+        if count >= 10:
+          encoder8_0.set_led_rgb(scan_enc_channel, 0xff4040)
+
+      # Stop
+      encoder8_0.set_led_rgb(scan_enc_channel, 0x000000)
+      if count >= 10:
+        break
+
+      # Set master volume
+      synth_0.set_master_volume(master_volume)
+
     # Play
     next_notes_on = score['time']
     while next_notes_on > time_cursor:
@@ -909,14 +1011,17 @@ def play_sequencer():
 
   # Retrieve the cursor position
   seq_show_cursor(seq_edit_track, False, False)
-  seq_time_cursor = seq_time_cursor_bk
-  seq_key_cursor[0] = seq_key_cursor0_bk
-  seq_key_cursor[1] = seq_key_cursor1_bk
-  seq_disp_time[0] = seq_disp_time0_bk
-  seq_disp_time[1] = seq_disp_time1_bk
+  seq_control['time_cursor'] = time_cursor_bk
+  seq_control['key_cursor'][0] = key_cursor0_bk
+  seq_control['key_cursor'][1] = key_cursor1_bk
+  seq_control['disp_time'][0] = seq_disp_time0_bk
+  seq_control['disp_time'][1] = seq_disp_time1_bk
   sequencer_draw_track(0)
   sequencer_draw_track(1)
   seq_show_cursor(seq_edit_track, True, True)
+
+  # Set master volume (for pause/stop)
+  synth_0.set_master_volume(master_volume)
 
   # Refresh screen
   sequencer_draw_track(0)
@@ -926,30 +1031,30 @@ def play_sequencer():
 
 # Show / erase sequencer cursor
 def seq_show_cursor(edit_track, disp_time, disp_key):
-  global seq_control, seq_draw_area, seq_disp_time, seq_time_cursor, seq_key_cursor, seq_disp_key
+  global seq_control, seq_draw_area
  
   # Draw time cursor
-  label_seq_time.setText('{:03d}/{:03d}'.format(seq_time_cursor,int(seq_time_cursor/seq_control['time_per_bar']) + 1))
-  if seq_disp_time[0] <= seq_time_cursor and seq_time_cursor <= seq_disp_time[1]:
+  label_seq_time.setText('{:03d}/{:03d}'.format(seq_control['time_cursor'],int(seq_control['time_cursor']/seq_control['time_per_bar']) + 1))
+  if seq_control['disp_time'][0] <= seq_control['time_cursor'] and seq_control['time_cursor'] <= seq_control['disp_time'][1]:
     for trknum in range(2):
       area = seq_draw_area[trknum]
       x = area[0]
       w = area[2] - area[0] + 1
       y = area[1]
       h = area[3] - area[1] + 1
-      xscale = int((area[2] - area[0] + 1) / (seq_disp_time[1] - seq_disp_time[0]))
+      xscale = int((area[2] - area[0] + 1) / (seq_control['disp_time'][1] - seq_control['disp_time'][0]))
 
       color = 0xffff40 if disp_time else 0x222222
-#      M5.Lcd.fillRect(x + seq_time_cursor * xscale - 3, y - 3, 6, 3, color)
-      M5.Lcd.fillRect(x + (seq_time_cursor - seq_disp_time[0]) * xscale - 3, y - 3, 6, 3, color)
+#      M5.Lcd.fillRect(x + seq_control['time_cursor'] * xscale - 3, y - 3, 6, 3, color)
+      M5.Lcd.fillRect(x + (seq_control['time_cursor'] - seq_control['disp_time'][0]) * xscale - 3, y - 3, 6, 3, color)
 
   # Draw key cursor
   area = seq_draw_area[edit_track]
 
   # Draw a keyboard of the track
-  key_s = seq_disp_key[edit_track][0]
-  key_e = seq_disp_key[edit_track][1]
-  note_num = seq_key_cursor[edit_track]
+  key_s = seq_control['disp_key'][edit_track][0]
+  key_e = seq_control['disp_key'][edit_track][1]
+  note_num = seq_control['key_cursor'][edit_track]
   if key_s <= note_num and note_num <= key_e:
     area = seq_draw_area[edit_track]
     x = area[0] - 6
@@ -963,24 +1068,24 @@ def seq_show_cursor(edit_track, disp_time, disp_key):
 
   # Show key name
   if edit_track == 0:
-    label_seq_key1.setText(seqencer_key_name(seq_key_cursor[0]))
+    label_seq_key1.setText(seqencer_key_name(seq_control['key_cursor'][0]))
   else:
-    label_seq_key2.setText(seqencer_key_name(seq_key_cursor[1]))
+    label_seq_key2.setText(seqencer_key_name(seq_control['key_cursor'][1]))
 
 
 # Draw a note on the sequencer
 def sequencer_draw_note(trknum, note_num, note_on_time, note_off_time, disp_mode):
-  global seq_disp_key, seq_disp_time, seq_draw_area, seq_note_color
+  global seq_control, seq_draw_area, seq_note_color
 
   # Key range to draw
-  key_s = seq_disp_key[trknum][0]
-  key_e = seq_disp_key[trknum][1]
+  key_s = seq_control['disp_key'][trknum][0]
+  key_e = seq_control['disp_key'][trknum][1]
   if note_num < key_s or note_num > key_e:
     return
 
   # Note rectangle to draw
-  time_s = seq_disp_time[0]
-  time_e = seq_disp_time[1]
+  time_s = seq_control['disp_time'][0]
+  time_e = seq_control['disp_time'][1]
   if note_on_time < time_s:
     note_on_time = time_s
   elif note_on_time > time_e:
@@ -1005,15 +1110,15 @@ def sequencer_draw_note(trknum, note_num, note_on_time, note_off_time, disp_mode
 
 # Draw velocity
 def sequencer_draw_velocity(trknum, channel, note_on_time, notes):
-  global seq_disp_key, seq_disp_time, seq_draw_area, seq_cursor_note
+  global seq_control, seq_draw_area, seq_cursor_note
 
   # Key range to draw
-  key_s = seq_disp_key[trknum][0]
-  key_e = seq_disp_key[trknum][1]
+  key_s = seq_control['disp_key'][trknum][0]
+  key_e = seq_control['disp_key'][trknum][1]
 
   # Time range to draw
-  time_s = seq_disp_time[0]
-  time_e = seq_disp_time[1]
+  time_s = seq_control['disp_time'][0]
+  time_e = seq_control['disp_time'][1]
 
   # Display coordinates
   area = seq_draw_area[trknum]
@@ -1046,23 +1151,23 @@ def sequencer_draw_velocity(trknum, channel, note_on_time, notes):
 
 # Draw start and end time line to play in sequencer
 def sequencer_draw_playtime(trknum):
-  global seq_play_time, seq_disp_time, seq_draw_area
+  global seq_play_time, seq_control, seq_draw_area
 
   # Draw track frame
   area = seq_draw_area[trknum]
   x = area[0]
   y = area[1]
-  xscale = int((area[2] - area[0] + 1) / (seq_disp_time[1] - seq_disp_time[0]))
+  xscale = int((area[2] - area[0] + 1) / (seq_control['disp_time'][1] - seq_control['disp_time'][0]))
 
   # Draw time line
   M5.Lcd.drawLine(x, y, area[2], y, 0x00ff40)
   if seq_play_time[0] < seq_play_time[1]:
     # Play time is on screen
-    if seq_play_time[0] < seq_disp_time[1] and seq_play_time[1] > seq_disp_time[0]:
-      ts = seq_play_time[0] if seq_play_time[0] > seq_disp_time[0] else seq_disp_time[0]
-      te = seq_play_time[1] if seq_play_time[1] < seq_disp_time[1] else seq_disp_time[1]
-      xs = x + (ts - seq_disp_time[0]) * xscale
-      xe = x + (te - seq_disp_time[0]) * xscale
+    if seq_play_time[0] < seq_control['disp_time'][1] and seq_play_time[1] > seq_control['disp_time'][0]:
+      ts = seq_play_time[0] if seq_play_time[0] > seq_control['disp_time'][0] else seq_control['disp_time'][0]
+      te = seq_play_time[1] if seq_play_time[1] < seq_control['disp_time'][1] else seq_control['disp_time'][1]
+      xs = x + (ts - seq_control['disp_time'][0]) * xscale
+      xe = x + (te - seq_control['disp_time'][0]) * xscale
       M5.Lcd.drawLine(xs, y, xe, y, 0xff40ff)
   # Play all
   else:
@@ -1072,7 +1177,7 @@ def sequencer_draw_playtime(trknum):
 # Draw sequencer track
 #   trknum: The track number to draw (0 or 1)
 def sequencer_draw_track(trknum):
-  global seq_control, seq_track_midi, seq_score, seq_disp_time
+  global seq_control, seq_track_midi, seq_score
   global seq_cursor_note
   global seq_parm
 
@@ -1085,11 +1190,11 @@ def sequencer_draw_track(trknum):
   w = area[2] - area[0] + 1
   y = area[1]
   h = area[3] - area[1] + 1
-  xscale = int((area[2] - area[0] + 1) / (seq_disp_time[1] - seq_disp_time[0]))
+  xscale = int((area[2] - area[0] + 1) / (seq_control['disp_time'][1] - seq_control['disp_time'][0]))
   M5.Lcd.fillRect(x, y, w, h, 0x222222)
-  for t in range(seq_disp_time[0] + 1, seq_disp_time[1]):
+  for t in range(seq_control['disp_time'][0] + 1, seq_control['disp_time'][1]):
     color = 0xffffff if t % seq_control['time_per_bar'] == 0 else 0x00ff40
-    x0 = x + (t - seq_disp_time[0]) * xscale
+    x0 = x + (t - seq_control['disp_time'][0]) * xscale
     M5.Lcd.drawLine(x0, y, x0, area[3], color)
   
   M5.Lcd.drawRect(x, y, w, h, 0x00ff40)
@@ -1098,8 +1203,8 @@ def sequencer_draw_track(trknum):
   sequencer_draw_playtime(trknum)
 
   # Draw time span
-  time_s = seq_disp_time[0]
-  time_e = seq_disp_time[1]
+  time_s = seq_control['disp_time'][0]
+  time_e = seq_control['disp_time'][1]
 
   # Draw notes of the track MIDI channel
   channel = seq_track_midi[trknum]
@@ -1154,11 +1259,11 @@ def sequencer_draw_track(trknum):
 
 # Draw keyboard
 def sequencer_draw_keyboard(trknum):
-  global seq_draw_area, seq_disp_key
+  global seq_draw_area, seq_control
 
   # Draw a keyboard of the track
-  key_s = seq_disp_key[trknum][0]
-  key_e = seq_disp_key[trknum][1]
+  key_s = seq_control['disp_key'][trknum][0]
+  key_e = seq_control['disp_key'][trknum][1]
   area = seq_draw_area[trknum]
   xscale = area[0] - 1
   black_scale = int(xscale / 2)
@@ -1200,6 +1305,9 @@ def application_screen_change():
     label_seq_time.setVisible(False)
     label_seq_master_volume.setVisible(False)
     label_seq_parm_name.setVisible(False)
+    label_seq_parm_value.setVisible(False)
+    label_seq_program1.setVisible(False)
+    label_seq_program2.setVisible(False)
 
     # Tile labels
     title_smf.setVisible(True)
@@ -1281,9 +1389,12 @@ def application_screen_change():
     label_seq_time.setVisible(True)
     label_seq_master_volume.setVisible(True)
     label_seq_parm_name.setVisible(True)
+    label_seq_parm_value.setVisible(True)
+    label_seq_program1.setVisible(True)
+    label_seq_program2.setVisible(True)
 
     # Draw sequencer tracks
-    seq_cursor_note = sequencer_find_note(seq_edit_track, seq_time_cursor, seq_key_cursor[seq_edit_track])
+    seq_cursor_note = sequencer_find_note(seq_edit_track, seq_control['time_cursor'], seq_control['key_cursor'][seq_edit_track])
     sequencer_draw_keyboard(0)
     sequencer_draw_keyboard(1)
     sequencer_draw_track(0)
@@ -1849,7 +1960,7 @@ def set_smf_transpose(dlt):
 #   ch: MIDI channel
 def send_midi_in_settings(ch):
   synth_0.set_instrument(midi_in_settings[ch]['gmbank'], ch, midi_in_settings[ch]['program'])
-  control_reverb(midi_in_ch, midi_in_settings[ch]['reverb'][0], midi_in_settings[ch]['reverb'][1], midi_in_settings[ch]['reverb'][2])
+  control_reverb(ch, midi_in_settings[ch]['reverb'][0], midi_in_settings[ch]['reverb'][1], midi_in_settings[ch]['reverb'][2])
   control_chorus(ch, midi_in_settings[ch]['chorus'][0], midi_in_settings[ch]['chorus'][1], midi_in_settings[ch]['chorus'][2], midi_in_settings[ch]['chorus'][3])
   control_vibrate(ch, midi_in_settings[ch]['vibrate'][0], midi_in_settings[ch]['vibrate'][1], midi_in_settings[ch]['vibrate'][2])
 
@@ -1858,6 +1969,24 @@ def send_midi_in_settings(ch):
 def send_all_midi_in_settings():
   for ch in range(16):
     send_midi_in_settings(ch)
+
+
+# Send all sequencer MIDI settings
+def send_all_sequencer_settings():
+  for ch in range(16):
+    synth_0.set_instrument(seq_control['gmbank'][ch], ch, seq_control['program'][ch])
+    control_reverb(ch, 0, 0, 0)
+    control_chorus(ch, 0, 0, 0, 0)
+    control_vibrate(ch, 0, 0, 0)
+
+
+# Send the current MIDI channel settings to MIDI channel 1
+# Normally, MIDI-IN instruments send MIDI channel1 message.
+def send_sequencer_current_channel_settings(ch):
+  synth_0.set_instrument(seq_control['gmbank'][ch], 0, seq_control['program'][ch])
+  control_reverb(0, 0, 0, 0)
+  control_chorus(0, 0, 0, 0, 0)
+  control_vibrate(0, 0, 0, 0)
 
 
 # Set and show new MIDI channel for MIDI-IN player
@@ -2132,7 +2261,7 @@ def encoder_read():
   global midi_in_settings, midi_in_set_num, enc_midi_set_ctrl, enc_midi_set_decade, enc_midi_prg_decade
   global enc_parameter_info, enc_total_parameters, smf_settings
   global app_screen_mode
-  global seq_control, seq_edit_track, seq_time_cursor, seq_key_cursor, seq_cursor_time, seq_cursor_note
+  global seq_control, seq_edit_track, seq_cursor_time, seq_cursor_note
   global seq_file_number, seq_file_ctrl
   global seq_parm, seq_play_time, seq_score
 
@@ -2171,11 +2300,14 @@ def encoder_read():
     # Sequencer screen
     seq_edit_track = 0 if enc_slide_switch else 1
     if app_screen_mode == SCREEN_MODE_SEQUENCER:
-      seq_cursor_note = sequencer_find_note(seq_edit_track, seq_time_cursor, seq_key_cursor[seq_edit_track])
+      seq_cursor_note = sequencer_find_note(seq_edit_track, seq_control['time_cursor'], seq_control['key_cursor'][seq_edit_track])
       sequencer_draw_track(0)
       sequencer_draw_track(1)
       label_seq_key1.setColor(0xff4040 if seq_edit_track == 0 else 0x00ccff)
       label_seq_key2.setColor(0xff4040 if seq_edit_track == 1 else 0x00ccff)
+
+      # Set MIDI channel 1 program as the current MIDI channel program
+      send_sequencer_current_channel_settings(seq_track_midi[seq_edit_track])
 
   # Scan encoders
   for enc_ch in range(1,9):
@@ -2235,6 +2367,15 @@ def encoder_read():
           seq_parm = seq_total_parameters -1
         elif seq_parm >= seq_total_parameters:
           seq_parm = 0
+
+    ## PRE-PROCESS: Parameter control encoder
+    if enc_menu == ENC_SEQ_CTRL1 or enc_menu == ENC_SEQ_CTRL2:
+      # Decade value button (toggle)
+      if enc_button and enc_button_ch[enc_ch-1]:
+        enc_parm_decade = not enc_parm_decade
+
+      if enc_parm_decade:
+        encoder8_0.set_led_rgb(enc_ch, 0xffa000)
 
     ## MENU PROCESS
     # Select SMF file
@@ -2471,7 +2612,7 @@ def encoder_read():
         label_midi_parm_value.setText('{:03d}'.format(disp))
 
     # Change master volume
-    elif enc_menu == ENC_SMF_MASTER_VOL or enc_menu == ENC_MIDI_MASTER_VOL or enc_menu == ENC_SEQ_MASTER_VOL2:
+    elif enc_menu == ENC_SMF_MASTER_VOL or enc_menu == ENC_MIDI_MASTER_VOL or enc_menu == ENC_SEQ_MASTER_VOL1 or enc_menu == ENC_SEQ_MASTER_VOL2:
       # Decade value button (toggle)
       if enc_button and enc_button_ch[enc_ch-1]:
         enc_mastervol_decade = not enc_mastervol_decade
@@ -2487,11 +2628,23 @@ def encoder_read():
       if enc_button:
         all_notes_off()
 
+    ##### COMMON #####
+
     # Change screen mode
     elif enc_menu == ENC_SMF_SCREEN or enc_menu == ENC_MIDI_SCREEN or enc_menu == ENC_SEQ_SCREEN1 or enc_menu == ENC_SEQ_SCREEN2:
       if delta != 0:
         app_screen_mode = (app_screen_mode + delta) % 2
         application_screen_change()
+        if app_screen_mode == SCREEN_MODE_PLAYER:
+          title_smf_params.setColor(0xff4040 if enc_slide_switch else 0xff8080, 0x555555 if enc_slide_switch else 0x222222)
+          title_midi_in_params.setColor(0xff8080 if enc_slide_switch else 0xff4040, 0x222222 if enc_slide_switch else 0x555555)
+          send_all_midi_in_settings()
+
+        elif app_screen_mode == SCREEN_MODE_SEQUENCER:
+          send_all_sequencer_settings()
+
+          # Set MIDI channel 1 program as the current MIDI channel program
+          send_sequencer_current_channel_settings(seq_track_midi[seq_edit_track])
 
     ##### SEQUENCER SREEN MODE #####
 
@@ -2502,7 +2655,9 @@ def encoder_read():
         label_seq_file.setText('{:03d}'.format(seq_file_number))
 
       if enc_button:
+        send_all_sequencer_settings()
         play_sequencer()
+        send_sequencer_current_channel_settings(seq_track_midi[seq_edit_track])
 
     # File operation
     elif  enc_menu == ENC_SEQ_FILE1 or enc_menu == ENC_SEQ_FILE2:
@@ -2528,41 +2683,41 @@ def encoder_read():
 
         # Move time cursor
         if seq_cursor_time:
-          seq_time_cursor = seq_time_cursor + delta
-          if seq_time_cursor < 0:
-            seq_time_cursor = 0
+          seq_control['time_cursor'] = seq_control['time_cursor'] + delta
+          if seq_control['time_cursor'] < 0:
+            seq_control['time_cursor'] = 0
 
           # Slide score-bar display area (time)
-          if seq_time_cursor < seq_disp_time[0]:
-            seq_disp_time[0] = seq_disp_time[0] - seq_control['time_per_bar']
-            seq_disp_time[1] = seq_disp_time[1] - seq_control['time_per_bar']
+          if seq_control['time_cursor'] < seq_control['disp_time'][0]:
+            seq_control['disp_time'][0] = seq_control['disp_time'][0] - seq_control['time_per_bar']
+            seq_control['disp_time'][1] = seq_control['disp_time'][1] - seq_control['time_per_bar']
             sequencer_draw_track(0)
             sequencer_draw_track(1)
 
-          elif seq_time_cursor > seq_disp_time[1]:
-            seq_disp_time[0] = seq_disp_time[0] + seq_control['time_per_bar']
-            seq_disp_time[1] = seq_disp_time[1] + seq_control['time_per_bar']
+          elif seq_control['time_cursor'] > seq_control['disp_time'][1]:
+            seq_control['disp_time'][0] = seq_control['disp_time'][0] + seq_control['time_per_bar']
+            seq_control['disp_time'][1] = seq_control['disp_time'][1] + seq_control['time_per_bar']
             sequencer_draw_track(0)
             sequencer_draw_track(1)
 
         # Move key cursor
         else:
-          seq_key_cursor[seq_edit_track] = seq_key_cursor[seq_edit_track] + delta
-          if seq_key_cursor[seq_edit_track] < 0:
-            seq_key_cursor[seq_edit_track] = 0
-          elif seq_key_cursor[seq_edit_track] > 127:
-            seq_key_cursor[seq_edit_track] = 127
+          seq_control['key_cursor'][seq_edit_track] = seq_control['key_cursor'][seq_edit_track] + delta
+          if seq_control['key_cursor'][seq_edit_track] < 0:
+            seq_control['key_cursor'][seq_edit_track] = 0
+          elif seq_control['key_cursor'][seq_edit_track] > 127:
+            seq_control['key_cursor'][seq_edit_track] = 127
 
           # Slide score-key display area (key)
-          if seq_key_cursor[seq_edit_track] < seq_disp_key[seq_edit_track][0]:
-            seq_disp_key[seq_edit_track][0] = seq_disp_key[seq_edit_track][0] - 1
-            seq_disp_key[seq_edit_track][1] = seq_disp_key[seq_edit_track][1] - 1
+          if seq_control['key_cursor'][seq_edit_track] < seq_control['disp_key'][seq_edit_track][0]:
+            seq_control['disp_key'][seq_edit_track][0] = seq_control['disp_key'][seq_edit_track][0] - 1
+            seq_control['disp_key'][seq_edit_track][1] = seq_control['disp_key'][seq_edit_track][1] - 1
             sequencer_draw_keyboard(seq_edit_track)
             sequencer_draw_track(seq_edit_track)
 
-          elif seq_key_cursor[seq_edit_track] > seq_disp_key[seq_edit_track][1]:
-            seq_disp_key[seq_edit_track][0] = seq_disp_key[seq_edit_track][0] + 1
-            seq_disp_key[seq_edit_track][1] = seq_disp_key[seq_edit_track][1] + 1
+          elif seq_control['key_cursor'][seq_edit_track] > seq_control['disp_key'][seq_edit_track][1]:
+            seq_control['disp_key'][seq_edit_track][0] = seq_control['disp_key'][seq_edit_track][0] + 1
+            seq_control['disp_key'][seq_edit_track][1] = seq_control['disp_key'][seq_edit_track][1] + 1
             sequencer_draw_keyboard(seq_edit_track)
             sequencer_draw_track(seq_edit_track)
 
@@ -2570,7 +2725,7 @@ def encoder_read():
         seq_show_cursor(seq_edit_track, True, True)
 
         # Find a note on the cursor
-        cursor_note = sequencer_find_note(seq_edit_track, seq_time_cursor, seq_key_cursor[seq_edit_track])
+        cursor_note = sequencer_find_note(seq_edit_track, seq_control['time_cursor'], seq_control['key_cursor'][seq_edit_track])
         if not cursor_note is None:
           if not seq_cursor_note is None:
             if cursor_note != seq_cursor_note:
@@ -2608,7 +2763,7 @@ def encoder_read():
           note_dur = note_data['duration'] + delta
           if note_dur >= 1:
             # Check overrap with another note
-            overrap_note = sequencer_find_note(seq_edit_track, score['time'] + note_dur, seq_key_cursor[seq_edit_track])
+            overrap_note = sequencer_find_note(seq_edit_track, score['time'] + note_dur, seq_control['key_cursor'][seq_edit_track])
             if not overrap_note is None:
               if overrap_note[1] != note_data and overrap_note[0]['time'] < score['time'] + note_dur:
                 note_dur = -1
@@ -2632,7 +2787,7 @@ def encoder_read():
       # New note
       else:
         if enc_button:
-          seq_cursor_note = sequencer_new_note(seq_track_midi[seq_edit_track], seq_time_cursor, seq_key_cursor[seq_edit_track])
+          seq_cursor_note = sequencer_new_note(seq_track_midi[seq_edit_track], seq_control['time_cursor'], seq_control['key_cursor'][seq_edit_track])
           sequencer_draw_track(0)
           sequencer_draw_track(1)
 
@@ -2640,6 +2795,17 @@ def encoder_read():
     elif enc_menu == ENC_SEQ_PARAMETER1 or enc_menu == ENC_SEQ_PARAMETER2:
       if delta != 0 or slide_switch_change:
         label_seq_parm_name.setText(seq_parameter_names[seq_parm])
+
+        # Show parameter value
+        if   seq_parm == SEQUENCER_PARM_TIMESPAN:
+          label_seq_parm_value.setText('{:03d}'.format(seq_control['disp_time'][1] - seq_control['disp_time'][0]))
+        elif seq_parm == SEQUENCER_PARM_TEMPO:
+          label_seq_parm_value.setText('{:3.1f}'.format(seq_control['tempo']))
+        elif seq_parm == SEQUENCER_PARM_PROGRAM:
+          label_seq_parm_value.setText('{:03d}'.format(seq_control['program'][seq_track_midi[seq_edit_track]]))
+        else:
+          label_seq_parm_value.setText('')
+
         sequencer_draw_track(0)
         sequencer_draw_track(1)
 
@@ -2653,6 +2819,7 @@ def encoder_read():
         # Change time span
         elif seq_parm == SEQUENCER_PARM_TIMESPAN:
           sequencer_timespan(delta)
+          label_seq_parm_value.setText('{:03d}'.format(seq_control['disp_time'][1] - seq_control['disp_time'][0]))
 
         # Change velocity of the note selected
         elif seq_parm == SEQUENCER_PARM_VELOCITY:
@@ -2683,19 +2850,19 @@ def encoder_read():
 
           # Insert
           if delta > 0:
-            affected = sequencer_insert_time(seq_track_midi[seq_edit_track], seq_time_cursor, delta)
+            affected = sequencer_insert_time(seq_track_midi[seq_edit_track], seq_control['time_cursor'], delta)
           # Delete
           elif delta < 0:
-            affected = sequencer_delete_time(seq_track_midi[seq_edit_track], seq_time_cursor, -delta)
+            affected = sequencer_delete_time(seq_track_midi[seq_edit_track], seq_control['time_cursor'], -delta)
 
           # Refresh screen
           if affected:
             seq_show_cursor(seq_edit_track, False, False)
-            seq_time_cursor = seq_time_cursor + delta
-            if seq_time_cursor < 0:
-              seq_time_cursor = 0
+            seq_control['time_cursor'] = seq_control['time_cursor'] + delta
+            if seq_control['time_cursor'] < 0:
+              seq_control['time_cursor'] = 0
 
-            seq_cursor_note = sequencer_find_note(seq_edit_track, seq_time_cursor, seq_key_cursor[seq_edit_track])
+            seq_cursor_note = sequencer_find_note(seq_edit_track, seq_control['time_cursor'], seq_control['key_cursor'][seq_edit_track])
             sequencer_draw_track(seq_edit_track)
             seq_show_cursor(seq_edit_track, True, True)
 
@@ -2706,21 +2873,21 @@ def encoder_read():
           # Insert
           if delta > 0:
             for ch in range(16):
-              affected = sequencer_insert_time(ch, seq_time_cursor, delta) or affected
+              affected = sequencer_insert_time(ch, seq_control['time_cursor'], delta) or affected
           # Delete
           elif delta < 0:
             for ch in range(16):
-              affected = sequencer_delete_time(ch, seq_time_cursor, -delta) or affected
+              affected = sequencer_delete_time(ch, seq_control['time_cursor'], -delta) or affected
 
           # Refresh screen
           if affected:
             seq_show_cursor(0, False, False)
             seq_show_cursor(1, False, False)
-            seq_time_cursor = seq_time_cursor + delta
-            if seq_time_cursor < 0:
-              seq_time_cursor = 0
+            seq_control['time_cursor'] = seq_control['time_cursor'] + delta
+            if seq_control['time_cursor'] < 0:
+              seq_control['time_cursor'] = 0
 
-            seq_cursor_note = sequencer_find_note(seq_edit_track, seq_time_cursor, seq_key_cursor[seq_edit_track])
+            seq_cursor_note = sequencer_find_note(seq_edit_track, seq_control['time_cursor'], seq_control['key_cursor'][seq_edit_track])
             sequencer_draw_track(0)
             sequencer_draw_track(1)
             seq_show_cursor(0, True, True)
@@ -2769,7 +2936,7 @@ def encoder_read():
 
             seq_show_cursor(0, False, False)
             seq_show_cursor(1, False, False)
-            seq_cursor_note = sequencer_find_note(seq_edit_track, seq_time_cursor, seq_key_cursor[seq_edit_track])
+            seq_cursor_note = sequencer_find_note(seq_edit_track, seq_control['time_cursor'], seq_control['key_cursor'][seq_edit_track])
             sequencer_draw_track(0)
             sequencer_draw_track(1)
             seq_show_cursor(0, True, True)
@@ -2781,6 +2948,26 @@ def encoder_read():
             seq_control['tempo'] = seq_control['tempo'] - delta * 0.1
             if seq_control['tempo'] < 0.1:
               seq_control['tempo'] = 0.1
+
+            label_seq_parm_value.setText('{:3.1f}'.format(seq_control['tempo']))
+
+        # Change MIDI channnel program
+        elif seq_parm == SEQUENCER_PARM_PROGRAM:
+          if delta != 0:
+            ch = seq_track_midi[seq_edit_track]
+            seq_control['program'][ch] = (seq_control['program'][ch] + delta) % 128
+            label_seq_parm_value.setText('{:03d}'.format(seq_control['program'][ch]))
+            prg = get_gm_program_name(seq_control['gmbank'][ch], seq_control['program'][ch])
+            prg = prg[:9]
+            if seq_track_midi[0] == ch:
+              label_seq_program1.setText(prg)
+
+            if seq_track_midi[1] == ch:
+              label_seq_program2.setText(prg)
+
+            synth_0.set_instrument(seq_control['gmbank'][ch], ch, seq_control['program'][ch])
+            send_sequencer_current_channel_settings(ch)
+
 
 # Set up the program
 def setup_player():
