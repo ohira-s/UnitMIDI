@@ -32,6 +32,8 @@
 #              1.1.1: 10/07/2024
 #                       Tempo parameter conforms to the music score regulation.
 #                       MIDI-IN works in duaring sequencer play.
+#              1.1.2: 10/08/2024
+#                       Repeat signs on score. (LOOP/SKIP/REPEAT)
 #
 # Copyright (C) Shunsuke Ohira, 2024
 #####################################################################################################
@@ -260,11 +262,12 @@ ENC_MIDI_SCREEN     = 7     # not available
 ENC_MIDI_MASTER_VOL = 8     # Change master volume
 
 # MIDI setting file controls list
-enc_midi_set_ctrl_list = ['LOD', 'SAV']     # MIDI IN setting file operation sign (load, save)
+enc_midi_set_ctrl_list = ['LOD', 'SAV', '---']     # MIDI IN setting file operation sign (load, save, nop)
 MIDI_SET_FILES_MAX = 1000                   # Maximum MIDI IN setting files
 MIDI_SET_FILE_LOAD = 0                      # Read a MIDI IN setting file menu id
 MIDI_SET_FILE_SAVE = 1                      # Save a MIDI IN setting file menu id
-enc_midi_set_ctrl  = MIDI_SET_FILE_LOAD     # Currnet MIDI IN setting file operation id
+MIDI_SET_FILE_NOP  = 2                      # Nop  a MIDI IN setting file menu id
+enc_midi_set_ctrl  = MIDI_SET_FILE_NOP      # Currnet MIDI IN setting file operation id
 
 # Effector control parameters
 enc_parameter_info = None                   # Information to change program task for the effector controle menu
@@ -367,13 +370,15 @@ seq_play_time = [0,0]               # Start and end time to play with sequencer
 # Sequencer file
 SEQ_FILE_LOAD = 0
 SEQ_FILE_SAVE = 1
+SEQ_FILE_NOP  = 2
 seq_file_path = '/sd//SYNTH/SEQFILE/'     # Sequencer files path
 seq_file_number = 0                       # Sequencer file number
-seq_file_ctrl = SEQ_FILE_LOAD             # Currnet MIDI IN setting file operation id
+seq_file_ctrl = SEQ_FILE_NOP              # Currnet MIDI IN setting file operation id
+seq_file_ctrl_label = ['L', 'S', '-']
 
 # Sequencer parameter
 #   Sequencer parameter strings to show
-seq_parameter_names = ['MDCH', 'MDPG', 'TIME', 'STR1', 'STRA', 'VELO', 'NBAR', 'RESL', 'CLR1', 'CLRA', 'PLYS', 'PLYE', 'TMP', 'MIN']
+seq_parameter_names = ['MDCH', 'MDPG', 'TIME', 'STR1', 'STRA', 'VELO', 'NBAR', 'RESL', 'CLR1', 'CLRA', 'PLYS', 'PLYE', 'TMP', 'MIN', 'REPT']
 seq_total_parameters = len(seq_parameter_names)   # Number of seq_parm
 SEQUENCER_PARM_CHANNEL = 0                        # Change a track MIDI channel
 SEQUENCER_PARM_PROGRAM = 1                        # Change program of MIDI channel
@@ -389,6 +394,7 @@ SEQUENCER_PARM_PLAYSTART = 10                     # Start and end time to play w
 SEQUENCER_PARM_PLAYEND = 11                       # End time to play with sequencer
 SEQUENCER_PARM_TEMPO = 12                         # Change tempo to play sequencer
 SEQUENCER_PARM_MINIMUM_NOTE = 13                  # Change minimum note length
+SEQUENCER_PARM_REPEAT = 14                        # Set repeat signs (NONE/LOOP/SKIP/REPEAT)
 seq_parm = SEQUENCER_PARM_CHANNEL                 # Current sequencer parameter index (= initial)
 
 # Sequencer channel data
@@ -420,6 +426,7 @@ seq_score = None
 #    }
 # ]
 seq_score_sign = None
+seq_parm_repeat = None
 
 # SEQUENCER title labels
 title_seq_track1 = None
@@ -505,7 +512,7 @@ def setup_sequencer():
   label_seq_key2.setText(seqencer_key_name(seq_control['key_cursor'][1]))
   label_seq_key2.setColor(0xff4040 if seq_edit_track == 1 else 0x00ccff)
   label_seq_file.setText('{:03d}'.format(seq_file_number))
-  label_seq_file_op.setText('L' if seq_file_ctrl == SEQ_FILE_LOAD else 'S')
+  label_seq_file_op.setText(seq_file_ctrl_label[seq_file_ctrl])
   label_seq_time.setText('{:03d}/{:03d}'.format(seq_control['time_cursor'],int(seq_control['time_cursor']/seq_control['time_per_bar']) + 1))
   label_seq_master_volume.setText('{:02d}'.format(master_volume))
 
@@ -557,7 +564,7 @@ def sequencer_save_file():
 # Load sequencer file
 def sequencer_load_file():
   global seq_control, seq_score, seq_cursor_note, seq_file_path, seq_file_number
-  global seq_score_sign
+  global seq_score_sign, seq_parm_repeat
 
   # Read MIDI IN settings JSON file
   rdjson = None
@@ -608,6 +615,8 @@ def sequencer_load_file():
     sequencer_draw_playtime(1)
     seq_show_cursor(0, True, True)
     seq_show_cursor(1, True, True)
+
+    seq_parm_repeat = None
 
     for trk in range(2):
       ch = seq_track_midi[trk]
@@ -868,11 +877,14 @@ def sequencer_delete_time(channel, time_cursor, del_times):
 
 # Up or Down time resolution
 def sequencer_resolution(res_up):
-  global seq_score
+  global seq_score, seq_score_sign
 
   # Reolution up
   if res_up:
     for score in seq_score:
+      score['time'] = score['time'] * 2
+
+    for score in seq_score_sign:
       score['time'] = score['time'] * 2
 
   # Resolution down
@@ -881,8 +893,73 @@ def sequencer_resolution(res_up):
       if score['time'] % 2 != 0:
         return
 
+    for score in seq_score_sign:
+      if score['time'] % 2 != 0:
+        return
+
     for score in seq_score:
       score['time'] = int(score['time'] / 2)
+
+    for score in seq_score_sign:
+      score['time'] = int(score['time'] / 2)
+
+
+# Get signs on score at tc(time cursor)
+def sequencer_get_repeat_control(tc):
+  global seq_score_sign
+  
+  if not seq_score_sign is None:
+    for sc_sign in seq_score_sign:
+      if sc_sign['time'] == tc:
+        return sc_sign
+
+  return None
+
+
+# Add or change score signs at a time
+def sequencer_edit_signs(sign_data):
+  global seq_score_sign
+  
+  if not sign_data is None:
+    tm = sign_data['time']
+    sc_sign = sequencer_get_repeat_control(tm)
+
+    # Insert new sign data
+    if sc_sign is None:
+      # Sign status check
+      flg = False
+      for ky in sign_data.keys():
+        if ky != 'time':
+          flg = flg or sign_data[ky]
+      
+      # No sign is True
+      if flg == False:
+        return
+
+      idx = 0
+      for idx in range(len(seq_score_sign)):
+        if seq_score_sign[idx]['time'] > tm:
+          seq_score_sign.insert(idx, sign_data)
+          return
+        else:
+          idx = idx + 1
+      
+      seq_score_sign.append(sign_data)
+
+    # Change sign parameters
+    else:
+      for ky in sign_data.keys():
+        sc_sign[ky] = sign_data[ky]
+
+      # Sign status check
+      flg = False
+      for ky in sign_data.keys():
+        if ky != 'time':
+          flg = flg or sign_data[ky]
+      
+      # No sign is True
+      if flg == False:
+        seq_score_sign.remove(sign_data)
 
 
 # Play sequencer score
@@ -943,18 +1020,7 @@ def play_sequencer():
     return tc
 
 
-  # Get signs on score at tc(time cursor)
-  def get_repeat_control(tc):
-    if not seq_score_sign is None:
-      for sc_sign in seq_score_sign:
-        if sc_sign['time'] == tc:
-          return sc_sign
-
-    return None
-
-
   ##### CODE: play_sequencer
-  seq_score_sign = [{'time': 0, 'loop': True, 'skip': False, 'repeat': False}, {'time': 16, 'loop': False, 'skip': True, 'repeat': False}, {'time':24, 'loop': False, 'skip': False, 'repeat': True}]
 
   # Backup the cursor position
   time_cursor_bk = seq_control['time_cursor']
@@ -1050,7 +1116,7 @@ def play_sequencer():
       time_cursor = move_play_cursor(time_cursor)
 
       # Loop/Skip/Repeat
-      repeat_ctrl = get_repeat_control(time_cursor)
+      repeat_ctrl = sequencer_get_repeat_control(time_cursor)
 #      print('REPEAT CTRL0:', time_cursor, repeat_ctrl)
       if not repeat_ctrl is None:
         # Skip bar point
@@ -1107,7 +1173,7 @@ def play_sequencer():
       continue
 
     # Loop/Skip/Repeat
-    repeat_ctrl = get_repeat_control(time_cursor)
+    repeat_ctrl = sequencer_get_repeat_control(time_cursor)
 #    print('REPEAT CTRL1:', time_cursor, repeat_ctrl)
     if not repeat_ctrl is None:
       # Loop bar point
@@ -1359,25 +1425,6 @@ def sequencer_draw_track(trknum):
   global seq_parm
   global seq_score_sign
 
-  # Get a color to draw repeat signs
-  def repeat_sign(t):
-    for sc_sign in seq_score_sign:
-      if sc_sign['time'] == t:
-        if sc_sign['loop']:
-          return 0xff4040
-
-        if sc_sign['skip']:
-          return 0x40a0a0
-
-        if sc_sign['repeat']:
-          return 0xff4000
-
-      if sc_sign['time'] > t:
-        break
-    
-    return None
-
-
   # Draw with velocity
   with_velocity = (seq_parm == SEQUENCER_PARM_VELOCITY)
 
@@ -1390,12 +1437,28 @@ def sequencer_draw_track(trknum):
   xscale = int((area[2] - area[0] + 1) / (seq_control['disp_time'][1] - seq_control['disp_time'][0]))
   M5.Lcd.fillRect(x, y, w, h, 0x222222)
   for t in range(seq_control['disp_time'][0] + 1, seq_control['disp_time'][1]):
-    color = repeat_sign(t)
-    if color is None:
-      color = 0xffffff if t % seq_control['time_per_bar'] == 0 else 0x00ff40
+    # Draw vertical line as a time grid
+    color = 0xffffff if t % seq_control['time_per_bar'] == 0 else 0x60a060
     x0 = x + (t - seq_control['disp_time'][0]) * xscale
     M5.Lcd.drawLine(x0, y, x0, area[3], color)
-  
+
+    # Signs on score
+    if t != 0:
+      sc_sign = sequencer_get_repeat_control(t)
+      if not sc_sign is None:
+        if sc_sign['loop']:
+          color = 0xffff00
+          x0 = x0 + 2
+        elif sc_sign['skip']:
+          color = 0x40a0ff
+          x0 = x0 + 2
+        elif sc_sign['repeat']:
+          color = 0xff4040
+          x0 = x0 - 2
+
+        M5.Lcd.drawLine(x0, y, x0, area[3], color)
+
+  # Draw frame
   M5.Lcd.drawRect(x, y, w, h, 0x00ff40)
 
   # Draw start and end time to play
@@ -2463,6 +2526,7 @@ def encoder_read():
   global seq_control, seq_edit_track, seq_cursor_time, seq_cursor_note
   global seq_file_number, seq_file_ctrl
   global seq_parm, seq_play_time, seq_score
+  global seq_parm_repeat
 
   # Get a parameter info array and parameter('params') index in the info.
   def get_enc_param_index(idx):
@@ -2575,6 +2639,32 @@ def encoder_read():
 
       if enc_parm_decade:
         encoder8_0.set_led_rgb(enc_ch, 0xffa000)
+
+      # Show repeat sign parameter just after changing the current time
+      if seq_parm == SEQUENCER_PARM_REPEAT:
+        if seq_parm_repeat is None:
+          seq_parm_repeat = seq_control['time_cursor']
+          rept = sequencer_get_repeat_control(seq_parm_repeat)
+          if rept is None:
+            label_seq_parm_value.setText('NON')
+
+        elif seq_parm_repeat != seq_control['time_cursor']:
+          seq_parm_repeat = seq_control['time_cursor']
+          rept = sequencer_get_repeat_control(seq_parm_repeat)
+
+        else:
+          rept = None
+
+        if not rept is None:
+          disp = 'NON'
+          if rept['loop']:
+            disp = 'LOP'
+          elif rept['skip']:
+            disp = 'SKP'
+          elif rept['repeat']:
+            disp = 'RPT'
+
+          label_seq_parm_value.setText(disp)
 
     ## MENU PROCESS
     # Select SMF file
@@ -2717,7 +2807,7 @@ def encoder_read():
     elif enc_menu == ENC_MIDI_FILE:
       # File control
       if delta != 0:
-        enc_midi_set_ctrl = (enc_midi_set_ctrl + delta) % 2
+        enc_midi_set_ctrl = (enc_midi_set_ctrl + delta) % 3
         label_midi_in_set_ctrl.setText(enc_midi_set_ctrl_list[enc_midi_set_ctrl])
 
       # File operation button
@@ -2737,10 +2827,16 @@ def encoder_read():
           else:
             print('MIDI IN SET: NO FILE')
 
+          enc_midi_set_ctrl = MIDI_SET_FILE_NOP
+          label_midi_in_set_ctrl.setText(enc_midi_set_ctrl_list[enc_midi_set_ctrl])
+
         # Save MIDI settings file
         elif enc_midi_set_ctrl == MIDI_SET_FILE_SAVE:
           write_midi_in_settings(midi_in_set_num)
           print('SAVE MIDI IN SET:', midi_in_set_num, midi_in_settings)
+
+          enc_midi_set_ctrl = MIDI_SET_FILE_NOP
+          label_midi_in_set_ctrl.setText(enc_midi_set_ctrl_list[enc_midi_set_ctrl])
 
     # Select MIDI channel to edit
     elif enc_menu == ENC_MIDI_CHANNEL:
@@ -2840,6 +2936,9 @@ def encoder_read():
           send_all_midi_in_settings()
 
         elif app_screen_mode == SCREEN_MODE_SEQUENCER:
+          label_seq_key1.setColor(0xff4040 if seq_edit_track == 0 else 0x00ccff)
+          label_seq_key2.setColor(0xff4040 if seq_edit_track == 1 else 0x00ccff)
+
           send_all_sequencer_settings()
 
           # Set MIDI channel 1 program as the current MIDI channel program
@@ -2861,15 +2960,19 @@ def encoder_read():
     # File operation
     elif  enc_menu == ENC_SEQ_FILE1 or enc_menu == ENC_SEQ_FILE2:
       if delta != 0:
-        seq_file_ctrl = (seq_file_ctrl + delta) % 2
-        label_seq_file_op.setText('L' if seq_file_ctrl == SEQ_FILE_LOAD else 'S')
+        seq_file_ctrl = (seq_file_ctrl + delta) % 3
+        label_seq_file_op.setText(seq_file_ctrl_label[seq_file_ctrl])
 
       if enc_button:
         if seq_file_ctrl == SEQ_FILE_LOAD:
           sequencer_load_file()
+          seq_file_ctrl = SEQ_FILE_NOP
+          label_seq_file_op.setText(seq_file_ctrl_label[seq_file_ctrl])
 
         elif seq_file_ctrl == SEQ_FILE_SAVE:
           sequencer_save_file()
+          seq_file_ctrl = SEQ_FILE_NOP
+          label_seq_file_op.setText(seq_file_ctrl_label[seq_file_ctrl])
 
     # Move sequencer cursor
     elif enc_menu == ENC_SEQ_CURSOR1 or enc_menu == ENC_SEQ_CURSOR2:
@@ -2885,6 +2988,11 @@ def encoder_read():
           seq_control['time_cursor'] = seq_control['time_cursor'] + delta
           if seq_control['time_cursor'] < 0:
             seq_control['time_cursor'] = 0
+
+          # Move the time for the sign time
+          if not seq_parm_repeat is None:
+            if seq_control['time_cursor'] != seq_parm_repeat:
+              seq_parm_repeat = None
 
           # Slide score-bar display area (time)
           if seq_control['time_cursor'] < seq_control['disp_time'][0]:
@@ -3182,6 +3290,54 @@ def encoder_read():
             synth_0.set_instrument(seq_control['gmbank'][ch], ch, seq_control['program'][ch])
             send_sequencer_current_channel_settings(ch)
 
+        # Set repeat signs (NONE/LOOP/SKIP/REPEAT)
+        elif seq_parm == SEQUENCER_PARM_REPEAT:
+          if not seq_parm_repeat is None:
+            if seq_parm_repeat == 0:
+              break
+
+            rept = sequencer_get_repeat_control(seq_parm_repeat)
+            if rept is None:
+              rept = {'time': seq_parm_repeat, 'loop': False, 'skip': False, 'repeat': False}
+
+            if rept['loop']:
+              rept['loop'] = False
+              if delta == 1:
+                rept['skip'] = True
+
+            elif rept['skip']:
+              rept['skip'] = False
+              if delta == -1:
+                rept['loop'] = True
+              else:
+                rept['repeat'] = True
+
+            elif rept['repeat']:
+              rept['repeat'] = False
+              if delta == -1:
+                rept['skip'] = True
+
+            else:
+              if delta == -1:
+                rept['repeat'] = True
+              else:
+                rept['loop'] = True
+
+            # Add or change score signs at a time
+            sequencer_edit_signs(rept)
+
+            disp = 'NON'
+            if not rept is None:
+              if rept['loop']:
+                disp = 'LOP'
+              elif rept['skip']:
+                disp = 'SKP'
+              elif rept['repeat']:
+                disp = 'RPT'
+
+            label_seq_parm_value.setText(disp)
+            sequencer_draw_track(0)
+            sequencer_draw_track(1)
 
 # Set up the program
 def setup_player():
@@ -3321,9 +3477,9 @@ def setup_player():
   all_notes_off()
 
   # Load default MIDI IN settings
-  midi_in_set = read_midi_in_settings(enc_midi_set_ctrl)
+  midi_in_set = read_midi_in_settings(midi_in_set_num)
   if not midi_in_set is None:
-    print('LOAD MIDI IN SET:', midi_in_set)
+    print('LOAD MIDI IN SET:', midi_in_set_num)
     midi_in_settings = midi_in_set
     set_midi_in_channel(0)
     set_midi_in_program(0)
