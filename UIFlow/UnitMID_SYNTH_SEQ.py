@@ -862,29 +862,25 @@ def sequencer_delete_time(channel, time_cursor, del_times):
     del_times = time_cursor
 
   affected = False
+  notes_moved = []
+  to_delete = []
   for score in seq_score:
     note_on_time = score['time']
 
     # Note-on time is equal or larger than the delete time
     if note_on_time >= time_cursor:
-      to_delete = []
       for note_data in score['notes']:
         if note_data['channel'] == channel:
           affected = True
 
           # Delete a note
-          to_delete.append(note_data)
+          to_delete.append((score, note_data))
 
           # Move the note as new note
-          sequencer_new_note(channel, note_on_time - del_times, note_data['note'], note_data['velocity'], note_data['duration'])
-
-      # Delete notes moved
-      for note_data in to_delete:
-        sequencer_delete_note(score, note_data)
+          notes_moved.append((note_on_time - del_times, note_data['note'], note_data['velocity'], note_data['duration']))
 
     # Note-on time is less than the delete time, and there are some notes acrossing the delete time
     elif note_on_time + score['max_duration'] >= time_cursor:
-      to_delete = []
       for note_data in score['notes']:
         if note_data['channel'] == channel:
 
@@ -895,11 +891,15 @@ def sequencer_delete_time(channel, time_cursor, del_times):
 
             # Zero length note
             if note_data['duration'] <= 0:
-              to_delete.append(note_data)
+              to_delete.append((score, note_data))
 
-      # Delete notes without duration
-      for note_data in to_delete:
-        sequencer_delete_note(score, note_data)
+  # Delete notes without duration
+  for score, note_data in to_delete:
+    sequencer_delete_note(score, note_data)
+
+  # Add notes moved
+  for note_time, note_key, velosity, duration in notes_moved:
+    sequencer_new_note(channel, note_time, note_key, velosity, duration)
 
   return affected
 
