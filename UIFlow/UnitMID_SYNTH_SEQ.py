@@ -34,6 +34,9 @@
 #                       MIDI-IN works in duaring sequencer play.
 #              1.1.2: 10/08/2024
 #                       Repeat signs on score. (LOOP/SKIP/REPEAT)
+#              1.1.3: 10/10/2024
+#                       Volume ration for each sequencer MIDI channel.
+#                       Change sequencer parameter value by decade or 1.
 #
 # Copyright (C) Shunsuke Ohira, 2024
 #####################################################################################################
@@ -378,27 +381,28 @@ seq_file_ctrl_label = ['L', 'S', '-']
 
 # Sequencer parameter
 #   Sequencer parameter strings to show
-seq_parameter_names = ['MDCH', 'MDPG', 'TIME', 'STR1', 'STRA', 'VELO', 'NBAR', 'RESL', 'CLR1', 'CLRA', 'PLYS', 'PLYE', 'TMP', 'MIN', 'REPT']
+seq_parameter_names = ['MDCH', 'MDPG', 'CHVL', 'TIME', 'STR1', 'STRA', 'VELO', 'NBAR', 'RESL', 'CLR1', 'CLRA', 'PLYS', 'PLYE', 'TMP', 'MIN', 'REPT']
 seq_total_parameters = len(seq_parameter_names)   # Number of seq_parm
 SEQUENCER_PARM_CHANNEL = 0                        # Change a track MIDI channel
 SEQUENCER_PARM_PROGRAM = 1                        # Change program of MIDI channel
-SEQUENCER_PARM_TIMESPAN = 2                       # Change times to display
-SEQUENCER_PARM_STRETCH_ONE = 3                    # Insert/Delete a time in the current MIDI channel
-SEQUENCER_PARM_STRETCH_ALL = 4                    # Insert/Delete a time in all MIDI channels
-SEQUENCER_PARM_VELOCITY = 5                       # Change note velocity
-SEQUENCER_PARM_NOTES_BAR = 6                      # Change number of notes in a bar
-SEQUENCER_PARM_RESOLUTION = 7                     # Resolution up
-SEQUENCER_PARM_CLEAR_ONE = 8                      # Clear all notes in the current MIDI channel
-SEQUENCER_PARM_CLEAR_ALL = 9                      # Clear all notes in all MIDI channels
-SEQUENCER_PARM_PLAYSTART = 10                     # Start and end time to play with sequencer
-SEQUENCER_PARM_PLAYEND = 11                       # End time to play with sequencer
-SEQUENCER_PARM_TEMPO = 12                         # Change tempo to play sequencer
-SEQUENCER_PARM_MINIMUM_NOTE = 13                  # Change minimum note length
-SEQUENCER_PARM_REPEAT = 14                        # Set repeat signs (NONE/LOOP/SKIP/REPEAT)
+SEQUENCER_PARM_CHANNEL_VOL = 2                    # Change volume ratio of MIDI channel
+SEQUENCER_PARM_TIMESPAN = 3                       # Change times to display
+SEQUENCER_PARM_STRETCH_ONE = 4                    # Insert/Delete a time in the current MIDI channel
+SEQUENCER_PARM_STRETCH_ALL = 5                    # Insert/Delete a time in all MIDI channels
+SEQUENCER_PARM_VELOCITY = 6                       # Change note velocity
+SEQUENCER_PARM_NOTES_BAR = 7                      # Change number of notes in a bar
+SEQUENCER_PARM_RESOLUTION = 8                     # Resolution up
+SEQUENCER_PARM_CLEAR_ONE = 9                      # Clear all notes in the current MIDI channel
+SEQUENCER_PARM_CLEAR_ALL = 10                     # Clear all notes in all MIDI channels
+SEQUENCER_PARM_PLAYSTART = 11                     # Start and end time to play with sequencer
+SEQUENCER_PARM_PLAYEND = 12                       # End time to play with sequencer
+SEQUENCER_PARM_TEMPO = 13                         # Change tempo to play sequencer
+SEQUENCER_PARM_MINIMUM_NOTE = 14                  # Change minimum note length
+SEQUENCER_PARM_REPEAT = 15                        # Set repeat signs (NONE/LOOP/SKIP/REPEAT)
 seq_parm = SEQUENCER_PARM_CHANNEL                 # Current sequencer parameter index (= initial)
 
 # Sequencer channel data
-#   [{'gmbank': <GM bank>, 'program': <GM program>, 'volume': <Volume maginitude>}, ..]
+#   [{'gmbank': <GM bank>, 'program': <GM program>, 'volume': <Volume ratio>}, ..]
 seq_channel = None
 
 # Sequencer score data
@@ -466,7 +470,7 @@ def setup_sequencer():
   # Initialize the sequencer channels
   seq_channel = []
   for ch in range(16):
-    seq_channel.append({'gmbank': smf_gmbank, 'program': ch, 'volume': 1.0})
+    seq_channel.append({'gmbank': smf_gmbank, 'program': ch, 'volume': 100})
 
   # Clear score
   seq_score = []
@@ -544,7 +548,7 @@ def setup_sequencer():
 
 # Save sequencer file
 def sequencer_save_file():
-  global seq_control, seq_score, seq_file_path, seq_file_number
+  global seq_channel, seq_control, seq_score, seq_file_path, seq_file_number
   global seq_score_sign
 
   # Write MIDI IN settings as JSON file
@@ -552,7 +556,7 @@ def sequencer_save_file():
   try:
     print('SAVE SEQ:', fpath)
     with open(fpath, 'w') as f:
-      json.dump({'control': seq_control, 'score': seq_score, 'sign': seq_score_sign}, f)
+      json.dump({'channel': seq_channel, 'control': seq_control, 'score': seq_score, 'sign': seq_score_sign}, f)
 
     f.close()
     print('SAVED')
@@ -563,8 +567,9 @@ def sequencer_save_file():
 
 # Load sequencer file
 def sequencer_load_file():
-  global seq_control, seq_score, seq_cursor_note, seq_file_path, seq_file_number
+  global seq_channel, seq_control, seq_score, seq_cursor_note, seq_file_path, seq_file_number
   global seq_score_sign, seq_parm_repeat
+  global enc_slide_switch
 
   # Read MIDI IN settings JSON file
   rdjson = None
@@ -606,7 +611,19 @@ def sequencer_load_file():
     else:
       seq_control = {'tempo': 120, 'mini_note': 4, 'time_per_bar': 4, 'disp_time': [0,12], 'disp_key': [[57,74],[57,74]], 'time_cursor': 0, 'key_cursor': [60,60], 'program':[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15], 'gmbank':[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}
 
+    if 'channel' in seq_data.keys():
+      if not seq_data['channel'] is None:
+        seq_channel = seq_data['channel']
+        for ch in range(16):
+          if not 'gmbank' in seq_channel[ch]:
+            seq_channel[ch]['gmbank'] = 0
+          if not 'program' in seq_channel[ch]:
+            seq_channel[ch]['program'] = 0
+          if not 'volume' in seq_channel[ch]:
+            seq_channel[ch]['volume'] = 100
+
     seq_cursor_note = sequencer_find_note(seq_edit_track, seq_control['time_cursor'], seq_control['key_cursor'][seq_edit_track])
+    enc_slide_switch = None
     sequencer_draw_keyboard(0)
     sequencer_draw_keyboard(1)
     sequencer_draw_track(0)
@@ -616,7 +633,19 @@ def sequencer_load_file():
     seq_show_cursor(0, True, True)
     seq_show_cursor(1, True, True)
 
-    seq_parm_repeat = None
+    disp = 'NON'
+    if not seq_parm_repeat is None:
+      rept = sequencer_get_repeat_control(seq_parm_repeat)
+      disp = 'NON'
+      if not rept is None:
+        if rept['loop']:
+          disp = 'LOP'
+        elif rept['skip']:
+          disp = 'SKP'
+        elif rept['repeat']:
+          disp = 'RPT'
+
+    label_seq_parm_value.setText(disp)
 
     for trk in range(2):
       ch = seq_track_midi[trk]
@@ -1212,7 +1241,7 @@ def play_sequencer():
     for note_data in score['notes']:
       channel = note_data['channel']
 #      print('SEQ NOTE ON:', time_cursor, note_data['note'])
-      note(channel, note_data['note'], int(note_data['velocity'] * seq_channel[channel]['volume']))
+      note(channel, note_data['note'], int(note_data['velocity'] * seq_channel[channel]['volume'] / 100))
       note_off_at = time_cursor + note_data['duration']
       insert_note_off(note_off_at, channel, note_data['note'])
 
@@ -3112,6 +3141,8 @@ def encoder_read():
           label_seq_parm_value.setText('{:=2d}'.format(2**seq_control['mini_note']))
         elif seq_parm == SEQUENCER_PARM_PROGRAM:
           label_seq_parm_value.setText('{:03d}'.format(seq_control['program'][seq_track_midi[seq_edit_track]]))
+        elif seq_parm == SEQUENCER_PARM_CHANNEL_VOL:
+          label_seq_parm_value.setText('{:03d}'.format(seq_channel[seq_track_midi[seq_edit_track]]['volume']))
         else:
           label_seq_parm_value.setText('')
 
@@ -3132,12 +3163,12 @@ def encoder_read():
 
         # Change velocity of the note selected
         elif seq_parm == SEQUENCER_PARM_VELOCITY:
-          if sequencer_velocity(delta):
+          if sequencer_velocity(delta * (10 if enc_parm_decade else 1)):
               sequencer_draw_track(seq_edit_track)
 
         # Change start time to begining play
         elif seq_parm == SEQUENCER_PARM_PLAYSTART:
-          pt = seq_play_time[0] + delta
+          pt = seq_play_time[0] + delta * (10 if enc_parm_decade else 1)
           print('PLAY S:', pt, delta, seq_play_time)
           if pt >= 0 and pt <= seq_play_time[1]:
             seq_play_time[0] = pt
@@ -3146,7 +3177,7 @@ def encoder_read():
 
         # Change end time to finish play
         elif seq_parm == SEQUENCER_PARM_PLAYEND:
-          pt = seq_play_time[1] + delta
+          pt = seq_play_time[1] + delta * (10 if enc_parm_decade else 1)
           print('PLAY E:', pt, delta, seq_play_time)
           if pt >= seq_play_time[0]:
             seq_play_time[1] = pt
@@ -3254,7 +3285,7 @@ def encoder_read():
         # Change number of notes in a bar
         elif seq_parm == SEQUENCER_PARM_TEMPO:
           if delta != 0:
-            seq_control['tempo'] = seq_control['tempo'] + delta
+            seq_control['tempo'] = seq_control['tempo'] + delta * (10 if enc_parm_decade else 1)
             if seq_control['tempo'] < 6:
               seq_control['tempo'] = 6
             elif seq_control['tempo'] > 999:
@@ -3275,56 +3306,73 @@ def encoder_read():
 
         # Change MIDI channnel program
         elif seq_parm == SEQUENCER_PARM_PROGRAM:
-          if delta != 0:
-            ch = seq_track_midi[seq_edit_track]
-            seq_control['program'][ch] = (seq_control['program'][ch] + delta) % 128
-            label_seq_parm_value.setText('{:03d}'.format(seq_control['program'][ch]))
-            prg = get_gm_program_name(seq_control['gmbank'][ch], seq_control['program'][ch])
-            prg = prg[:9]
-            if seq_track_midi[0] == ch:
-              label_seq_program1.setText(prg)
+          ch = seq_track_midi[seq_edit_track]
+          seq_control['program'][ch] = (seq_control['program'][ch] + delta * (10 if enc_parm_decade else 1)) % 128
+          label_seq_parm_value.setText('{:03d}'.format(seq_control['program'][ch]))
+          prg = get_gm_program_name(seq_control['gmbank'][ch], seq_control['program'][ch])
+          prg = prg[:9]
+          if seq_track_midi[0] == ch:
+            label_seq_program1.setText(prg)
 
-            if seq_track_midi[1] == ch:
-              label_seq_program2.setText(prg)
+          if seq_track_midi[1] == ch:
+            label_seq_program2.setText(prg)
 
-            synth_0.set_instrument(seq_control['gmbank'][ch], ch, seq_control['program'][ch])
-            send_sequencer_current_channel_settings(ch)
+          synth_0.set_instrument(seq_control['gmbank'][ch], ch, seq_control['program'][ch])
+          send_sequencer_current_channel_settings(ch)
+
+        # Change a volume ratio of MIDI channel
+        elif seq_parm == SEQUENCER_PARM_CHANNEL_VOL:
+          ch = seq_track_midi[seq_edit_track]
+          vol = seq_channel[ch]['volume']
+          vol = vol + delta * (10 if enc_parm_decade else 1)
+          if vol < 0:
+            vol = 0
+          elif vol > 100:
+            vol = 100
+
+          seq_channel[ch]['volume'] = vol
+          label_seq_parm_value.setText('{:03d}'.format(vol))
 
         # Set repeat signs (NONE/LOOP/SKIP/REPEAT)
         elif seq_parm == SEQUENCER_PARM_REPEAT:
-          if not seq_parm_repeat is None:
+          if seq_parm_repeat is None:
+            label_seq_parm_value.setText('NON')
+
+          else:
             if seq_parm_repeat == 0:
+              label_seq_parm_value.setText('NON')
               break
 
             rept = sequencer_get_repeat_control(seq_parm_repeat)
             if rept is None:
               rept = {'time': seq_parm_repeat, 'loop': False, 'skip': False, 'repeat': False}
 
-            if rept['loop']:
-              rept['loop'] = False
-              if delta == 1:
-                rept['skip'] = True
+            if delta != 0:
+              if rept['loop']:
+                rept['loop'] = False
+                if delta == 1:
+                  rept['skip'] = True
 
-            elif rept['skip']:
-              rept['skip'] = False
-              if delta == -1:
-                rept['loop'] = True
+              elif rept['skip']:
+                rept['skip'] = False
+                if delta == -1:
+                  rept['loop'] = True
+                else:
+                  rept['repeat'] = True
+
+              elif rept['repeat']:
+                rept['repeat'] = False
+                if delta == -1:
+                  rept['skip'] = True
+
               else:
-                rept['repeat'] = True
+                if delta == -1:
+                  rept['repeat'] = True
+                else:
+                  rept['loop'] = True
 
-            elif rept['repeat']:
-              rept['repeat'] = False
-              if delta == -1:
-                rept['skip'] = True
-
-            else:
-              if delta == -1:
-                rept['repeat'] = True
-              else:
-                rept['loop'] = True
-
-            # Add or change score signs at a time
-            sequencer_edit_signs(rept)
+              # Add or change score signs at a time
+              sequencer_edit_signs(rept)
 
             disp = 'NON'
             if not rept is None:
