@@ -228,20 +228,31 @@ class message_definitions():
     self.MSGID_SETUP_PLAYER_SCREEN = 998
     self.MSGID_APPLICATION_SCREEN_CHANGE = 999
 
+    self.MSGID_PHONE_SEQ_TURN_OFF_PLAY_BUTTON = 1001
+    self.MSGID_PHONE_SEQ_GET_PAUSE_STOP_BUTTON = 1002
+    self.MSGID_PHONE_SEQ_STOP_BUTTON = 1003
+
+    self.VIEW_MIDI_IN_PLAYER_SETUP = 3001
+    self.VIEW_MIDI_IN_PLAYER_SET_TEXT = 3002
+    self.VIEW_MIDI_IN_PLAYER_SET_VISIBLE = 3003
+    self.VIEW_MIDI_IN_PLAYER_SET_COLOR = 3004
+
 ################# End of Message ID Definition Class Definition #################
 
 ########################
 # Message Center Class
+#   send_message : CONTRIBUTOR -- message_id, message_data --> MESSAGE CENTER/QUEUE     -- message_id, message_data --> SUBSCRIBERs
+#   phone_message: SUBSCRIBER  -- message_id, message_data --> MESSAGE CENTER/IMMEDIATE -- return value             --> SUBSCRIBER
 ########################
 class message_center_class(message_definitions):
   # Constructor
   def __init__(self):
     super().__init__()
-    self.message_queue = []
-    self.message_buffer = []
-    self.queue_lock = False
-    self.contributors = []
-    self.subscribers = []
+    self.message_queue = []       # Message queue to deliver
+    self.message_buffer = []      # Temporally buffer of message queue during the message_quere is locked
+    self.queue_lock = False       # Message queue is locked or not
+    self.contributors = []        # [constributor_class_object1, ...]
+    self.subscribers = {}         # {subscriber_class_object1: {message_id1: worker_function1, message_id2: worker_func2, ...}, subscriber_class_object2:...}
 
   # Lock the message queue
   def lock(self):
@@ -261,18 +272,48 @@ class message_center_class(message_definitions):
       self.lock()
 
   # Add a contributor object
+  #   contributor: Class object whick is permitted to send messages
   def add_contributor(self, contributor):
     self.contributors.append(contributor)
 
-  # Add a subscriber object
-  def add_subscriber(self, subscriber):
-    self.subscribers.append(subscriber)
+  # Add a dispath information for a subscriber
+  #   subscriber: Class object to subscribe the message
+  #   message_id: Message ID
+  #   worker_func: Called function for this message
+  def add_subscriber(self, subscriber, message_id, worker_func):
+    if subscriber in self.subscribers:
+      self.subscribers[subscriber][message_id] = worker_func
+    else:
+      self.subscribers[subscriber] = {}
+      self.subscribers[subscriber][message_id] = worker_func
 
-  # Pusu a message
-  def send_message(self, contributor, mesg_id, mesg_data):
+  # Send a message immediately without via the message queue, and return its result
+  #   subscriber: Class object to subscribe the message
+  #   message_id: Message ID
+  #   message_data: Message data (allow any data type, 'no_response' in dictionary is used as default value)
+  def phone_message(self, subscriber, message_id, message_data):
+    for subscriber in self.subscribers.keys():
+      if message_id in self.subscribers[subscriber]:
+        print('PHONE MESSAGE:', message_id, message_data)
+        return self.subscribers[subscriber][message_id](message_data)
+
+    print('message_center_class: Ignore message:', message_id, message_data)
+    if message_data is None:
+      return None
+
+    if 'no_response' in message_data.keys():
+      return message_data['no_response']
+
+    return None
+
+  # Pusu a message in the message queue
+  #   contributor: Class object sending this message
+  #   message_id: Message ID
+  #   message_data: Message data (allow any data type)
+  def send_message(self, contributor, message_id, message_data):
     if contributor in self.contributors:
       if self.lock:
-        self.message_buffer.insert(0, {'message_id': mesg_id, 'message_data': mesg_data})
+        self.message_buffer.insert(0, {'message_id': message_id, 'message_data': message_data})
         print('BUFFERED MESSAGE:', len(self.message_buffer), self.message_buffer)
         return
 
@@ -281,14 +322,16 @@ class message_center_class(message_definitions):
         self.message_queue = self.message_buffer + self.message_queue
         self.message_buffer = []
 
-      self.message_queue.insert(0, {'message_id': mesg_id, 'message_data': mesg_data})
+      self.message_queue.insert(0, {'message_id': message_id, 'message_data': message_data})
       self.unlock()
       print('ADD MESSAGE:', len(self.message_queue), self.message_queue)
 
     else:
-      print('MESSAGE CENTER: Message from an unknown contributor:', mesg_id, mesg_data)
+      print('MESSAGE CENTER: Message from an unknown contributor:', message_id, message_data)
 
-  # Pusu a messages
+  # Pusu messages in the message queue at once
+  #   contributor: Class object sending this message
+  #   messages: [{'message_id': Message ID, 'message_data': Message Data}, ...]
   def send_messages(self, contributor, messages):
     if contributor in self.contributors:
       if self.lock:
@@ -311,38 +354,56 @@ class message_center_class(message_definitions):
 
   # Get the first message in the queue and send it to all subscribers
   def deliver_message(self):
-      mesg_num = len(self.message_queue) + len(self.message_buffer)
-      if mesg_num > 0:
-        self.wait_unlock(True)
+    mesg_num = len(self.message_queue) + len(self.message_buffer)
+    if mesg_num > 0:
+      self.wait_unlock(True)
 
-        if len(self.message_buffer) > 0:
-          self.message_queue = self.message_buffer + self.message_queue
-          self.message_buffer = []
+      if len(self.message_buffer) > 0:
+        self.message_queue = self.message_buffer + self.message_queue
+        self.message_buffer = []
 
-        message = self.message_queue.pop()
-        self.unlock()
+      message = self.message_queue.pop()
+      self.unlock()
 
-        for reader in self.subscribers:
-          print('DELIVER MESSAGE:', message['message_id'], message['message_data'])
-          reader.receive_message(message['message_id'], message['message_data'])
+      for subscriber in self.subscribers.keys():
+        message_id = message['message_id']
+        message_data = message['message_data']
+        print('POST MESSAGE:', message_id, message_data)
+        dispatched = 0
+        if message_id in self.subscribers[subscriber]:
+          print('DISPATCH MESSAGE:', message_id, message_data)
+          self.subscribers[subscriber][message_id](message_data)
+          dispatched = dispatched + 1
+
+        if dispatched == 0:
+          print('message_center_class: Lost message:', message_id, message_data)
 
   # Send all messages to all subscribers
   def flush_messages(self):
-      mesg_num = len(self.message_queue) + len(self.message_buffer)
-      if mesg_num > 0:
-        self.wait_unlock(True)
+    mesg_num = len(self.message_queue) + len(self.message_buffer)
+    if mesg_num > 0:
+      self.wait_unlock(True)
 
-        if len(self.message_buffer) > 0:
-          self.message_queue = self.message_buffer + self.message_queue
-          self.message_buffer = []
+      if len(self.message_buffer) > 0:
+        self.message_queue = self.message_buffer + self.message_queue
+        self.message_buffer = []
 
-        while len(self.message_queue) > 0:
-          message = self.message_queue.pop()
-          for reader in self.subscribers:
-            print('FLUSH MESSAGE:', message['message_id'], message['message_data'])
-            reader.receive_message(message['message_id'], message['message_data'])
+      while len(self.message_queue) > 0:
+        message = self.message_queue.pop()
+        dispatched = 0
+        for subscriber in self.subscribers.keys():
+          message_id = message['message_id']
+          message_data = message['message_data']
+          print('FLUSH MESSAGE:', message_id, message_data)
+          if message_id in self.subscribers[subscriber]:
+            print('DISPATCH MESSAGE:', message_id, message_data)
+            self.subscribers[subscriber][message_id](message_data)
+            dispatched = dispatched + 1
 
-        self.unlock()
+        if dispatched == 0:
+          print('message_center_class: Lost message:', message_id, message_data)
+
+      self.unlock()
 
 ################# End of Message Center Class Definition #################
 
@@ -374,8 +435,6 @@ class device_manager_class():
 # Tile labels
 title_smf = None
 title_smf_params = None
-title_midi_in = None
-title_midi_in_params = None
 title_general = None
 
 # SMF data labels
@@ -390,122 +449,12 @@ label_smf_parameter = None
 label_smf_parm_value = None
 label_smf_parm_title = None
 
-# MIDI data labels
-label_midi_in_set = None
-label_midi_in_set_ctrl = None
-label_midi_in = None
-label_channel = None
-label_program = None
-label_program_name = None
-label_midi_parameter = None
-label_midi_parm_value = None
-label_midi_parm_title = None
-
-# 8encoders unit
-encoder8_0 = None           # 8encoder object
-enc_button_ch = [False]*8   # Previous status of 8 push switches (on:True, off:False)
-
-# Encoder number in slide switch on
-#   11: CH1 .. 18: CH8
-#   Change number, you can change function assignment channel.
-ENC_SMF_FILE       = 11     # Select SMF file
-ENC_SMF_TRANSPORSE = 12     # Set transpose for SMF player
-ENC_SMF_VOLUME     = 13     # Set volume for SMF player
-ENC_SMF_TEMPO      = 14     # Set tempo for SMF player
-ENC_SMF_PARAMETER  = 15     # Select parameter to edit
-ENC_SMF_CTRL       = 16     # Set effector parameter values
-ENC_SMF_SCREEN     = 17     # not available
-ENC_SMF_MASTER_VOL = 18     # Change master volume
-
-# Encoder number in slide switch off
-#   1: CH1 .. 8: CH8
-#   Change number, you can change function assignment channel.
-ENC_MIDI_SET        = 1     # Select MIDI setting file
-ENC_MIDI_FILE       = 2     # File operation (load, save)
-ENC_MIDI_CHANNEL    = 3     # Select MIDI channel to edit
-ENC_MIDI_PROGRAM    = 4     # Select program for MIDI channel
-ENC_MIDI_PARAMETER  = 5     # Select parameter to edit
-ENC_MIDI_CTRL       = 6     # Set effector parameter values
-ENC_MIDI_SCREEN     = 7     # not available
-ENC_MIDI_MASTER_VOL = 8     # Change master volume
-
-# Effector control parameters
-enc_parameter_info = None                   # Information to change program task for the effector controle menu
-                                            # Data definition is in setup(), see setup(). 
-enc_total_parameters = 0                    # Sum of enc_parameter_info[*]['params'] array size, see setup()
-EFFECTOR_PARM_INIT  = 0                     # Initial parameter index
-enc_parm = EFFECTOR_PARM_INIT               # Current parameter index
-
-# Change parameter value by decade or 1 (decade: True, 1: False)
-enc_parm_decade = False                     # Change effector parameter values 
-enc_volume_decade = False                   # Change SMF volume
-enc_mastervol_decade = False                # Change master volume
-enc_midi_set_decade = False                 # Select MIDI IN setting file
-enc_midi_prg_decade = False                 # Select program for MIDI IN channel
-
-
-##### MIDI Sequencer Data Structure #####
-sequencer_obj = None                        # Sequencer object
-
-# Sequencer mode: Encoder number in slide switch off
-#   1: CH1 .. 8: CH8
-#   Change number, you can change function assignment channel.
-#     TRACK1
-ENC_SEQ_SET1        = 111   # Select MIDI setting file
-ENC_SEQ_FILE1       = 112   # File operation (load, save)
-ENC_SEQ_CURSOR1     = 113   # Move sequencer cursor
-ENC_SEQ_NOTE_LEN1   = 114   # Set sequencer note length
-ENC_SEQ_PARAMETER1  = 115   # Select parameter to edit
-ENC_SEQ_CTRL1       = 116   # Set effector parameter values
-ENC_SEQ_SCREEN1     = 117   # not available
-ENC_SEQ_MASTER_VOL1 = 118   # Change master volume
-#     TRACK2
-ENC_SEQ_SET2        = 101   # Select MIDI setting file
-ENC_SEQ_FILE2       = 102   # File operation (load, save)
-ENC_SEQ_CURSOR2     = 103   # Move sequencer cursor
-ENC_SEQ_NOTE_LEN2   = 104   # Set sequencer note length
-ENC_SEQ_PARAMETER2  = 105   # Select parameter to edit
-ENC_SEQ_CTRL2       = 106   # Set effector parameter values
-ENC_SEQ_SCREEN2     = 107   # not available
-ENC_SEQ_MASTER_VOL2 = 108   # Change master volume
-
-# Sequencer internal parameters
-seq_cursor_time_or_key = True             # True: Move time cursor / False: Move key cursor
-
-# Sequencer file
-SEQ_FILE_LOAD = 0
-SEQ_FILE_SAVE = 1
-SEQ_FILE_NOP  = 2
-seq_file_number = 0                       # Sequencer file number
-seq_file_ctrl = SEQ_FILE_NOP              # Currnet MIDI IN setting file operation id
-seq_file_ctrl_label = ['L', 'S', '-']
-
-# Sequencer parameter
-#   Sequencer parameter strings to show
-seq_parameter_names = ['MDCH', 'MDPG', 'CHVL', 'TIME', 'STR1', 'STRA', 'VELO', 'NBAR', 'RESL', 'CLR1', 'CLRA', 'PLYS', 'PLYE', 'TMP', 'MIN', 'REPT']
-seq_total_parameters = len(seq_parameter_names)   # Number of seq_parm
-SEQUENCER_PARM_CHANNEL = 0                        # Change a track MIDI channel
-SEQUENCER_PARM_PROGRAM = 1                        # Change program of MIDI channel
-SEQUENCER_PARM_CHANNEL_VOL = 2                    # Change volume ratio of MIDI channel
-SEQUENCER_PARM_TIMESPAN = 3                       # Change times to display
-SEQUENCER_PARM_STRETCH_ONE = 4                    # Insert/Delete a time in the current MIDI channel
-SEQUENCER_PARM_STRETCH_ALL = 5                    # Insert/Delete a time in all MIDI channels
-SEQUENCER_PARM_VELOCITY = 6                       # Change note velocity
-SEQUENCER_PARM_NOTES_BAR = 7                      # Change number of notes in a bar
-SEQUENCER_PARM_RESOLUTION = 8                     # Resolution up
-SEQUENCER_PARM_CLEAR_ONE = 9                      # Clear all notes in the current MIDI channel
-SEQUENCER_PARM_CLEAR_ALL = 10                     # Clear all notes in all MIDI channels
-SEQUENCER_PARM_PLAYSTART = 11                     # Start and end time to play with sequencer
-SEQUENCER_PARM_PLAYEND = 12                       # End time to play with sequencer
-SEQUENCER_PARM_TEMPO = 13                         # Change tempo to play sequencer
-SEQUENCER_PARM_MINIMUM_NOTE = 14                  # Change minimum note length
-SEQUENCER_PARM_REPEAT = 15                        # Set repeat signs (NONE/LOOP/SKIP/REPEAT)
-seq_parm = SEQUENCER_PARM_CHANNEL                 # Current sequencer parameter index (= initial)
-
 # Class objects
-sdcard_obj = None
-midi_obj = None
-smf_player_obj = None
+sdcard_obj     = None     # SD Card
+midi_obj       = None     # MIDI
+smf_player_obj = None     # Standard MIDI File Player
+sequencer_obj  = None     # Sequencer
+application    = None     # Application
 
 
 ###################
@@ -749,22 +698,10 @@ class smf_player_class(message_center_class):
 
     if not message_center is None:
       self.message_center = message_center
-      self.message_center.add_subscriber(self)
-      self.dispatcher = {
-        self.message_center.MSGID_CHANGE_SMF_FILE_NO: self.func_CHANGE_SMF_FILE_NO,
-        self.message_center.MSGID_SMF_PLAYER_CONTROL: self.func_SMF_PLAYER_CONTROL
-      }
+      self.message_center.add_subscriber(self, self.message_center.MSGID_CHANGE_SMF_FILE_NO, self.func_CHANGE_SMF_FILE_NO)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_SMF_PLAYER_CONTROL, self.func_SMF_PLAYER_CONTROL)
     else:
       self.message_center = self
-      self.dispatcher = {}
-
-  # Receive a message from message center (The message center calls this function)
-  def receive_message(self, message_id, message_data):
-    if message_id in self.dispatcher:
-      print('DISPATCH MESSAGE@smf_player_class:', message_id, message_data)
-      self.dispatcher[message_id](message_data)
-    else:
-      print('smf_player_subscriber: Unknown message:', message_id, message_data)
 
   def func_CHANGE_SMF_FILE_NO(self, message_data):
     if self.set_playing_smf() == False:
@@ -1398,6 +1335,31 @@ class sequencer_class(message_center_class):
     self.seq_parm_repeat = None
     self.seq_control = {'tempo': 120, 'mini_note': 4, 'time_per_bar': 4, 'disp_time': [0,12], 'disp_key': [[57,74],[57,74]], 'time_cursor': 0, 'key_cursor': [60,60], 'program':[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15], 'gmbank':[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}
 
+    # Sequencer parameter
+    #   Sequencer parameter strings to show
+    self.SEQUENCER_PARM_CHANNEL = 0                        # Change a track MIDI channel
+    self.SEQUENCER_PARM_PROGRAM = 1                        # Change program of MIDI channel
+    self.SEQUENCER_PARM_CHANNEL_VOL = 2                    # Change volume ratio of MIDI channel
+    self.SEQUENCER_PARM_TIMESPAN = 3                       # Change times to display
+    self.SEQUENCER_PARM_STRETCH_ONE = 4                    # Insert/Delete a time in the current MIDI channel
+    self.SEQUENCER_PARM_STRETCH_ALL = 5                    # Insert/Delete a time in all MIDI channels
+    self.SEQUENCER_PARM_VELOCITY = 6                       # Change note velocity
+    self.SEQUENCER_PARM_NOTES_BAR = 7                      # Change number of notes in a bar
+    self.SEQUENCER_PARM_RESOLUTION = 8                     # Resolution up
+    self.SEQUENCER_PARM_CLEAR_ONE = 9                      # Clear all notes in the current MIDI channel
+    self.SEQUENCER_PARM_CLEAR_ALL = 10                     # Clear all notes in all MIDI channels
+    self.SEQUENCER_PARM_PLAYSTART = 11                     # Start and end time to play with sequencer
+    self.SEQUENCER_PARM_PLAYEND = 12                       # End time to play with sequencer
+    self.SEQUENCER_PARM_TEMPO = 13                         # Change tempo to play sequencer
+    self.SEQUENCER_PARM_MINIMUM_NOTE = 14                  # Change minimum note length
+    self.SEQUENCER_PARM_REPEAT = 15                        # Set repeat signs (NONE/LOOP/SKIP/REPEAT)
+    self.seq_parm = self.SEQUENCER_PARM_CHANNEL                 # Current sequencer parameter index (= initial)
+
+    # Sequencer parameter
+    #   Sequencer parameter strings to show
+    self.seq_parameter_names = ['MDCH', 'MDPG', 'CHVL', 'TIME', 'STR1', 'STRA', 'VELO', 'NBAR', 'RESL', 'CLR1', 'CLRA', 'PLYS', 'PLYE', 'TMP', 'MIN', 'REPT']
+    self.seq_total_parameters = len(self.seq_parameter_names)   # Number of seq_parm
+
     # Editor/Player settings
     self.seq_edit_track = 0                  # The track number to edit (0 or 1, 0 is Track1 as display)
     self.seq_track_midi = [0,1]              # MIDI channels for the two tracks on the display
@@ -1476,8 +1438,8 @@ class sequencer_class(message_center_class):
     label_seq_key1.setColor(0xff4040 if self.seq_edit_track == 0 else 0x00ccff)
     label_seq_key2.setText(self.seqencer_key_name(self.seq_control['key_cursor'][1]))
     label_seq_key2.setColor(0xff4040 if self.seq_edit_track == 1 else 0x00ccff)
-    label_seq_file.setText('{:03d}'.format(seq_file_number))
-    label_seq_file_op.setText(seq_file_ctrl_label[seq_file_ctrl])
+    label_seq_file.setText('{:03d}'.format(device_8encoder.seq_file_number))
+    label_seq_file_op.setText(device_8encoder.seq_file_ctrl_label[device_8encoder.seq_file_ctrl])
     label_seq_time.setText('{:03d}/{:03d}'.format(self.seq_control['time_cursor'],int(self.seq_control['time_cursor']/self.seq_control['time_per_bar']) + 1))
     self.message_center.send_message(self, self.message_center.MSGID_SHOW_MASTER_VOLUME_VALUE, None)
 
@@ -1491,7 +1453,7 @@ class sequencer_class(message_center_class):
     prg = prg[:9]
     label_seq_program2.setText(prg)
     
-    label_seq_parm_name.setText(seq_parameter_names[seq_parm])
+    label_seq_parm_name.setText(self.seq_parameter_names[self.seq_parm])
     label_seq_parm_value.setText('')
 
     label_seq_track1.setVisible(False)
@@ -2136,10 +2098,8 @@ class sequencer_class(message_center_class):
     time_cursor = self.seq_play_time[0]
     end_time = self.seq_play_time[1] if self.seq_play_time[0] < self.seq_play_time[1] else -1
 
-    # Wait for the play button turning off 
-    scan_enc_channel = ENC_SEQ_SET1 % 10
-    while encoder8_0.get_button_status(scan_enc_channel) == False:
-      time.sleep(0.1)
+    # Wait for the play button turning off to start play
+    self.message_center.phone_message(self, self.message_center.MSGID_PHONE_SEQ_TURN_OFF_PLAY_BUTTON, None)
 
     # Repeat controls
     loop_play_time = 0
@@ -2156,45 +2116,14 @@ class sequencer_class(message_center_class):
       print('SEQ POINT:', time_cursor, play_slot)
       score = self.seq_score[play_slot]
 
-      # Scan stop button
-      if encoder8_0.get_button_status(scan_enc_channel) == False:
-
-        # Stop sound
-        encoder8_0.set_led_rgb(scan_enc_channel, 0x40ff40)
+      # Scan stop button (PLAY-->PAUSE-->STOP)
+      if self.message_center.phone_message(self, self.message_center.MSGID_PHONE_SEQ_GET_PAUSE_STOP_BUTTON, {'no_response': False}):
         self.midi_obj.set_master_volume(0)
-
-        # Wait for releasing the button
-        count = 0
-        while encoder8_0.get_button_status(scan_enc_channel) == False:
-          time.sleep(0.1)
-          count = count + 1
-          if count >= 10:
-            encoder8_0.set_led_rgb(scan_enc_channel, 0xff4040)
-
-        # Stop
-        if count >= 10:
-          encoder8_0.set_led_rgb(scan_enc_channel, 0x000000)
-          break
-
-        # Pause
-        encoder8_0.set_led_rgb(scan_enc_channel, 0xffff00)
-        while encoder8_0.get_button_status(scan_enc_channel) == True:
-          time.sleep(0.1)
-
-        count = 0
-        while encoder8_0.get_button_status(scan_enc_channel) == False:
-          time.sleep(0.1)
-          count = count + 1
-          if count >= 10:
-            encoder8_0.set_led_rgb(scan_enc_channel, 0xff4040)
-
-        # Stop
-        encoder8_0.set_led_rgb(scan_enc_channel, 0x000000)
-        if count >= 10:
-          break
-
-        # Set master volume
-        self.midi_obj.set_master_volume(master_volume)
+        count = self.message_center.phone_message(self, self.message_center.MSGID_PHONE_SEQ_STOP_BUTTON, {'no_response': 1})
+        if count >= 0:    # Stop playing (push the button long)
+          self.midi_obj.set_master_volume(master_volume)
+          if count > 0:
+            break
 
       # Play4,8,16,32,64--1,2,3,4,5--1,2,4,8,16
       skip_continue = False
@@ -2508,10 +2437,8 @@ class sequencer_class(message_center_class):
   # Draw sequencer track
   #   trknum: The track number to draw (0 or 1)
   def sequencer_draw_track(self, trknum):
-    global seq_parm
-
     # Draw with velocity
-    with_velocity = (seq_parm == SEQUENCER_PARM_VELOCITY)
+    with_velocity = (self.seq_parm == self.SEQUENCER_PARM_VELOCITY)
 
     # Draw track frame
     area = self.seq_draw_area[trknum]
@@ -2647,7 +2574,7 @@ class sequencer_class(message_center_class):
 ########################
 # MIDI-IN Player class
 ########################
-class midi_in_player_class():
+class midi_in_player_class(message_center_class):
   def __init__(self, midi_obj, sdcard_obj):
     self.sdcard_obj = sdcard_obj
     self.midi_obj = midi_obj
@@ -2665,6 +2592,12 @@ class midi_in_player_class():
     # SYNTH settings
     for ch in range(16):
       self.midi_in_settings.append({'program':0, 'gmbank':0, 'reverb':[0,0,0], 'chorus':[0,0,0,0], 'vibrate':[0,0,0]})
+
+    if not message_center is None:
+      self.message_center = message_center
+      self.message_center.add_contributor(self)
+    else:
+      self.message_center = self
 
   # Set midi_in_setting
   def set_midi_in_setting(self, val):
@@ -2780,14 +2713,14 @@ class midi_in_player_class():
   # Set and show new program to the current MIDI channel for MIDI-IN player
   #   dlt: GM program delta value added to the current MIDI IN channel to edit.
   def set_midi_in_program(self, dlt):
-    global label_program, label_program_name
-
     self.midi_in_settings[self.midi_in_ch]['program'] = (self.midi_in_settings[self.midi_in_ch]['program'] + dlt) % 128
     midi_in_program = self.midi_in_settings[self.midi_in_ch]['program']
-    label_program.setText('{:0>3d}'.format(midi_in_program))
+#    label_program.setText('{:0>3d}'.format(midi_in_program))
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_program', 'format': '{:0>3d}', 'value': midi_in_program})
 
     prg = self.midi_obj.get_gm_program_name(self.midi_in_settings[self.midi_in_ch]['gmbank'], midi_in_program)
-    label_program_name.setText(prg)
+#    label_program_name.setText(prg)
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_program_name', 'value': prg})
     self.midi_obj.set_instrument(self.midi_in_settings[self.midi_in_ch]['gmbank'], self.midi_in_ch, midi_in_program)
 
 
@@ -2878,6 +2811,91 @@ class midi_in_player_class():
 
 ################# End of MIDI-IN Player Class Definition #################
 
+#################################################
+# View class for MIDI-IN Player (M5Stack CORE2)
+#################################################
+class view_midi_in_player_class(message_center_class):
+  # Constructor
+  def __init__(self, midi_in_player_obj, message_center = None):
+    # Title labels
+    self.title_midi_in = None
+    self.title_midi_in_params = None
+
+    # Data labels
+    self.label_midi_in_set = None
+    self.label_midi_in_set_ctrl = None
+    self.label_midi_in = None
+    self.label_channel = None
+    self.label_program = None
+    self.label_program_name = None
+    self.label_midi_parameter = None
+    self.label_midi_parm_value = None
+    self.label_midi_parm_title = None
+
+    self.label_list = {}
+
+    # Refer midi_in_player object data to draw GUI
+    self.data_obj = midi_in_player_obj
+
+    if not message_center is None:
+      self.message_center = message_center
+#      self.message_center.add_contributor(self)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_MIDI_IN_PLAYER_SETUP, self.func_MIDI_IN_PLAYER_SETUP)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, self.func_MIDI_IN_PLAYER_SET_TEXT)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, self.func_MIDI_IN_PLAYER_SET_VISIBLE)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_COLOR, self.func_MIDI_IN_PLAYER_SET_COLOR)
+    else:
+      self.message_center = self
+
+  def func_MIDI_IN_PLAYER_SETUP(self, message_data):
+    # Titles
+    self.title_midi_in = Widgets.Label('title_midi_in', 0, 100, 1.0, 0x00ccff, 0x222222, Widgets.FONTS.DejaVu18)
+    self.title_midi_in_params = Widgets.Label('title_midi_in_params', 0, 120, 1.0, 0xff8080, 0x222222, Widgets.FONTS.DejaVu18)
+
+    # Data labels
+    self.label_midi_in_set = Widgets.Label('label_midi_in_set', 0, 140, 1.0, 0x00ffcc, 0x222222, Widgets.FONTS.DejaVu18)
+    self.label_midi_in_set_ctrl = Widgets.Label('label_midi_in_set', 46, 140, 1.0, 0x00ffcc, 0x222222, Widgets.FONTS.DejaVu18)
+    self.label_midi_in = Widgets.Label('label_midi_in', 165, 100, 1.0, 0x00ffcc, 0x222222, Widgets.FONTS.DejaVu18)
+    self.label_channel = Widgets.Label('label_channel', 108, 140, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+    self.label_program = Widgets.Label('label_program', 159, 140, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+    self.label_program_name = Widgets.Label('label_program_name', 0, 160, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+    self.label_midi_parameter = Widgets.Label('label_midi_parameter', 204, 140, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+    self.label_midi_parm_value = Widgets.Label('label_midi_parm_value', 264, 140, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+    self.label_midi_parm_title = Widgets.Label('label_midi_parm_title', 204, 100, 1.0, 0x00ccff, 0x222222, Widgets.FONTS.DejaVu18)
+
+    self.label_list = {
+      'title_midi_in': self.title_midi_in, 'title_midi_in_params': self.title_midi_in_params,
+      'label_midi_in_set': self.label_midi_in_set, 'label_midi_in_set_ctrl': self.label_midi_in_set_ctrl,
+      'label_midi_in': self.label_midi_in, 'label_channel': self.label_channel,
+      'label_program': self.label_program, 'label_program_name': self.label_program_name,
+      'label_midi_parameter': self.label_midi_parameter, 'label_midi_parm_value': self.label_midi_parm_value,
+      'label_midi_parm_title': self.label_midi_parm_title
+    }
+
+  def func_MIDI_IN_PLAYER_SET_TEXT(self, message_data):
+    label_name = message_data['label']
+    if label_name in self.label_list.keys():
+      if 'format' in message_data.keys():
+        self.label_list[label_name].setText(message_data['format'].format(message_data['value']))
+      else:
+        self.label_list[label_name].setText(message_data['value'])
+
+    return 0
+
+  def func_MIDI_IN_PLAYER_SET_VISIBLE(self, message_data):
+    label_name = message_data['label']
+    if label_name in self.label_list.keys():
+      self.label_list[label_name].setVisible(message_data['visible'])
+
+    return 0
+
+  def func_MIDI_IN_PLAYER_SET_COLOR(self, message_data):
+    label_name = message_data['label']
+    if label_name in self.label_list.keys():
+      self.label_list[label_name].setColor(message_data['fore'], message_data['back'])
+
+    return 0
+
 
 ###############################################
 # Unit-MIDI / M5Stack CORE2 application class
@@ -2895,32 +2913,35 @@ class unit5c2_synth_application_class(message_center_class):
 
     # MIDI setting file controls list
     self.enc_midi_set_ctrl_list = ['LOD', 'SAV', '---']     # MIDI IN setting file operation sign (load, save, nop)
-    self.MIDI_SET_FILE_LOAD = 0                      # Read a MIDI IN setting file menu id
-    self.MIDI_SET_FILE_SAVE = 1                      # Save a MIDI IN setting file menu id
-    self.MIDI_SET_FILE_NOP  = 2                      # Nop  a MIDI IN setting file menu id
-    self.enc_midi_set_ctrl  = MIDI_SET_FILE_NOP      # Currnet MIDI IN setting file operation id
+    self.MIDI_SET_FILE_LOAD = 0                             # Read a MIDI IN setting file menu id
+    self.MIDI_SET_FILE_SAVE = 1                             # Save a MIDI IN setting file menu id
+    self.MIDI_SET_FILE_NOP  = 2                             # Nop  a MIDI IN setting file menu id
+    self.enc_midi_set_ctrl  = self.MIDI_SET_FILE_NOP        # Currnet MIDI IN setting file operation id
+
+    # Effector control parameters
+    self.enc_parameter_info = None                          # Information to change program task for the effector controle menu
+                                                            # Data definition is in setup(), see setup(). 
+    self.enc_total_parameters = 0                           # Sum of enc_parameter_info[*]['params'] array size, see setup()
+    self.EFFECTOR_PARM_INIT   = 0                           # Initial parameter index
+    self.enc_parm = self.EFFECTOR_PARM_INIT                      # Current parameter index
 
     if not message_center is None:
       self.message_center = message_center
       self.message_center.add_contributor(self)
-      self.message_center.add_subscriber(self)
-      self.dispatcher = {
-          self.message_center.MSGID_SMF_PLAYER_ACTIVATED: self.func_SMF_PLAYER_ACTIVATED,
-          self.message_center.MSGID_SMF_PLAYER_INACTIVATED: self.func_SMF_PLAYER_INACTIVATED,
-          self.message_center.MSGID_MIDI_IN_PLAYER_ACTIVATED: self.func_MIDI_IN_PLAYER_ACTIVATED,
-          self.message_center.MSGID_MIDI_IN_PLAYER_INACTIVATED: self.func_MIDI_IN_PLAYER_INACTIVATED,
-          self.message_center.MSGID_SEQUENCER_ACTIVATED: self.func_SEQUENCER_ACTIVATED,
-          self.message_center.MSGID_SHOW_MASTER_VOLUME_VALUE: self.func_SHOW_MASTER_VOLUME_VALUE,
-          self.message_center.MSGID_SET_MIDI_IN_CHANNEL: self.func_SET_MIDI_IN_CHANNEL,
-          self.message_center.MSGID_MIDI_FILE_OPERATION: self.func_MIDI_FILE_OPERATION,
-          self.message_center.MSGID_MIDI_FILE_LOAD_SAVE: self.func_MIDI_FILE_LOAD_SAVE,
-          self.message_center.MSGID_SWITCH_UPPER_LOWER: self.func_SWITCH_UPPER_LOWER,
-          self.message_center.MSGID_SETUP_PLAYER_SCREEN: self.func_SETUP_PLAYER_SCREEN,
-          self.message_center.MSGID_APPLICATION_SCREEN_CHANGE: self.func_APPLICATION_SCREEN_CHANGE
-        }
+      self.message_center.add_subscriber(self, self.message_center.MSGID_SMF_PLAYER_ACTIVATED, self.func_SMF_PLAYER_ACTIVATED)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_SMF_PLAYER_INACTIVATED, self.func_SMF_PLAYER_INACTIVATED)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_IN_PLAYER_ACTIVATED, self.func_MIDI_IN_PLAYER_ACTIVATED)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_IN_PLAYER_INACTIVATED, self.func_MIDI_IN_PLAYER_INACTIVATED)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_ACTIVATED, self.func_SEQUENCER_ACTIVATED)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_SHOW_MASTER_VOLUME_VALUE, self.func_SHOW_MASTER_VOLUME_VALUE)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_SET_MIDI_IN_CHANNEL, self.func_SET_MIDI_IN_CHANNEL)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_FILE_OPERATION, self.func_MIDI_FILE_OPERATION)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_FILE_LOAD_SAVE, self.func_MIDI_FILE_LOAD_SAVE)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_SWITCH_UPPER_LOWER, self.func_SWITCH_UPPER_LOWER)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_SETUP_PLAYER_SCREEN, self.func_SETUP_PLAYER_SCREEN)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_APPLICATION_SCREEN_CHANGE, self.func_APPLICATION_SCREEN_CHANGE)
     else:
       self.message_center = self
-      self.dispatcher = {}
 
   def is_player_screen(self):
     return self.app_screen_mode == self.SCREEN_MODE_PLAYER
@@ -2928,13 +2949,18 @@ class unit5c2_synth_application_class(message_center_class):
   def is_sequencer_screen(self):
     return self.app_screen_mode == self.SCREEN_MODE_SEQUENCER
 
-  # Receive a message from message center (The message center calls this function)
-  def receive_message(self, message_id, message_data):
-    if message_id in self.dispatcher:
-      print('DISPATCH MESSAGE@unit5c2_synth_application_class:', message_id, message_data)
-      self.dispatcher[message_id](message_data)
-    else:
-      print('unit5c2_synth_subscriber: Unknown message:', message_id, message_data)
+  # Get a parameter info array and parameter('params') index in the info.
+  def get_enc_param_index(self, idx):
+    pfrom = 0
+    pto = -1
+    for effector in self.enc_parameter_info:
+      pnum = len(effector['params'])
+      pfrom = pto + 1
+      pto = pfrom + pnum - 1
+      if pfrom <= idx and idx <= pto:
+        return (effector, idx - pfrom)
+
+    return (None, -1)
 
   def func_SMF_PLAYER_ACTIVATED(self, message_data):
     title_smf_params.setColor(0xff4040, 0x555555)
@@ -2943,10 +2969,12 @@ class unit5c2_synth_application_class(message_center_class):
     title_smf_params.setColor(0xff8080, 0x222222)
 
   def func_MIDI_IN_PLAYER_ACTIVATED(self, message_data):
-    title_midi_in_params.setColor(0xff4040, 0x555555)
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_COLOR, {'label': 'title_midi_in_params', 'fore': 0xff4040, 'back': 0x555555})
+#    title_midi_in_params.setColor(0xff4040, 0x555555)
 
   def func_MIDI_IN_PLAYER_INACTIVATED(self, message_data):
-    title_midi_in_params.setColor(0xff8080, 0x222222)
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_COLOR, {'label': 'title_midi_in_params', 'fore': 0xff8080, 'back': 0x222222})
+#    title_midi_in_params.setColor(0xff8080, 0x222222)
 
   def func_SEQUENCER_ACTIVATED(self, message_data):
     sequencer_obj.set_cursor_note(sequencer_obj.sequencer_find_note(sequencer_obj.edit_track(), sequencer_obj.get_seq_time_cursor(), sequencer_obj.get_seq_key_cursor(sequencer_obj.edit_track())))
@@ -2968,23 +2996,23 @@ class unit5c2_synth_application_class(message_center_class):
 
   def func_SET_MIDI_IN_CHANNEL(self, message_data):
     channel = midi_in_player_obj.set_midi_in_channel(message_data['delta'])
-    label_channel.setText('{:0>2d}'.format(channel + 1))
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_channel', 'format': '{:0>2d}', 'value': channel + 1})
 
     # Reset the parameter to edit
-    enc_parm = EFFECTOR_PARM_INIT
-    label_midi_parm_title.setText(enc_parameter_info[enc_parm]['title'])
-    label_midi_parameter.setText(enc_parameter_info[enc_parm]['params'][0]['label'])
-    label_midi_parm_value.setText('{:03d}'.format(midi_in_player_obj.midi_in_settings[midi_in_player_obj.midi_in_ch]['reverb'][0]))
+    self.enc_parm = self.EFFECTOR_PARM_INIT
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parm_title', 'value': self.enc_parameter_info[self.enc_parm]['title']})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parameter', 'value': self.enc_parameter_info[self.enc_parm]['params'][0]['label']})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parm_value', 'format': '{:03d}', 'value': midi_in_player_obj.midi_in_settings[midi_in_player_obj.midi_in_ch]['reverb'][0]})
 
   def func_MIDI_FILE_OPERATION(self, message_data):
     delta = message_data['delta']
     if delta != 0:
       self.enc_midi_set_ctrl = (self.enc_midi_set_ctrl + delta) % 3
-      label_midi_in_set_ctrl.setText(self.enc_midi_set_ctrl_list[self.enc_midi_set_ctrl])
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in_set_ctrl', 'value': self.enc_midi_set_ctrl_list[self.enc_midi_set_ctrl]})
 
   def func_MIDI_FILE_LOAD_SAVE(self, message_data):
     # Load a MIDI settings file
-    if self.enc_midi_set_ctrl == MIDI_SET_FILE_LOAD:
+    if self.enc_midi_set_ctrl == self.MIDI_SET_FILE_LOAD:
       midi_in_set = self.midi_in_player_obj.read_midi_in_settings(self.midi_in_player_obj.set_midi_in_set_num())
       if not midi_in_set is None:
         print('LOAD MIDI IN SET:', midi_in_set)
@@ -2998,16 +3026,16 @@ class unit5c2_synth_application_class(message_center_class):
       else:
         print('MIDI IN SET: NO FILE')
 
-      self.enc_midi_set_ctrl = MIDI_SET_FILE_NOP
-      label_midi_in_set_ctrl.setText(self.enc_midi_set_ctrl_list[self.enc_midi_set_ctrl])
+      self.enc_midi_set_ctrl = self.MIDI_SET_FILE_NOP
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in_set_ctrl', 'value': self.enc_midi_set_ctrl_list[self.enc_midi_set_ctrl]})
 
     # Save MIDI settings file
-    elif self.enc_midi_set_ctrl == MIDI_SET_FILE_SAVE:
+    elif self.enc_midi_set_ctrl == self.MIDI_SET_FILE_SAVE:
       self.midi_in_player_obj.write_midi_in_settings(self.midi_in_player_obj.set_midi_in_set_num())
       print('SAVE MIDI IN SET:', self.midi_in_player_obj.set_midi_in_set_num(), self.midi_in_player_obj.get_midi_in_setting())
 
-      self.enc_midi_set_ctrl = MIDI_SET_FILE_NOP
-      label_midi_in_set_ctrl.setText(self.enc_midi_set_ctrl_list[self.enc_midi_set_ctrl])
+      self.enc_midi_set_ctrl = self.MIDI_SET_FILE_NOP
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in_set_ctrl', 'value': self.enc_midi_set_ctrl_list[self.enc_midi_set_ctrl]})
 
   def func_SWITCH_UPPER_LOWER(self, message_data):
     # Player screen
@@ -3030,20 +3058,19 @@ class unit5c2_synth_application_class(message_center_class):
 
   # Set up the program
   def func_SETUP_PLAYER_SCREEN(self, message_data):
-    global title_smf, title_smf_params, title_midi_in, title_midi_in_params, title_general
-    global label_channel, kbstr, label_smf_fnum, label_smf_tempo
-    global label_smf_file, label_smf_fname, label_smf_transp, label_smf_volume, label_program, label_program_name, label_master_volume
-    global label_midi_parameter, label_midi_parm_value, label_smf_parameter, label_smf_parm_value
+    global title_smf, title_smf_params, title_general
+    global kbstr, label_smf_fnum, label_smf_tempo
+    global label_smf_file, label_smf_fname, label_smf_transp, label_smf_volume, label_master_volume
+    global label_smf_parameter, label_smf_parm_value
     global enc_ch_val
-    global label_midi_in
-    global label_midi_in_set, label_midi_in_set_ctrl
-    global enc_parameter_info, enc_total_parameters, label_smf_parm_title, label_midi_parm_title
+    global label_smf_parm_title
+
+    # GUI for MIDI-IN Player setup
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SETUP, None)
 
     # Titles
     title_smf = Widgets.Label('title_smf', 0, 0, 1.0, 0x00ccff, 0x222222, Widgets.FONTS.DejaVu18)
     title_smf_params = Widgets.Label('title_smf_params', 0, 20, 1.0, 0xff8080, 0x222222, Widgets.FONTS.DejaVu18)
-    title_midi_in = Widgets.Label('title_midi_in', 0, 100, 1.0, 0x00ccff, 0x222222, Widgets.FONTS.DejaVu18)
-    title_midi_in_params = Widgets.Label('title_midi_in_params', 0, 120, 1.0, 0xff8080, 0x222222, Widgets.FONTS.DejaVu18)
     title_general = Widgets.Label('title_general', 0, 200, 1.0, 0xff8080, 0x222222, Widgets.FONTS.DejaVu18)
 
     # GUI for SMF player
@@ -3059,21 +3086,6 @@ class unit5c2_synth_application_class(message_center_class):
     label_smf_file = Widgets.Label('label_smf_file', 0, 60, 1.0, 0x00ffcc, 0x222222, Widgets.FONTS.DejaVu18)
     label_smf_fname = Widgets.Label('label_smf_fname', 60, 60, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
 
-    # GUI for MIDI-IN play
-    label_midi_in_set = Widgets.Label('label_midi_in_set', 0, 140, 1.0, 0x00ffcc, 0x222222, Widgets.FONTS.DejaVu18)
-    label_midi_in_set_ctrl = Widgets.Label('label_midi_in_set', 46, 140, 1.0, 0x00ffcc, 0x222222, Widgets.FONTS.DejaVu18)
-    label_channel = Widgets.Label('label_channel', 108, 140, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
-    label_program = Widgets.Label('label_program', 159, 140, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
-    label_midi_parameter = Widgets.Label('label_midi_parameter', 204, 140, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
-    label_midi_parm_value = Widgets.Label('label_midi_parm_value', 264, 140, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
-    label_midi_parm_title = Widgets.Label('label_midi_parm_title', 204, 100, 1.0, 0x00ccff, 0x222222, Widgets.FONTS.DejaVu18)
-
-    # Program name
-    label_program_name = Widgets.Label('label_program_name', 0, 160, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
-
-    # MIDI IN status
-    label_midi_in = Widgets.Label('label_midi_in', 165, 100, 1.0, 0x00ffcc, 0x222222, Widgets.FONTS.DejaVu18)
-
     # Master Volume
     label_master_volume = Widgets.Label('label_master_volume', 0, 220, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
 
@@ -3084,15 +3096,15 @@ class unit5c2_synth_application_class(message_center_class):
     #             'value'.  : tupple (MAX,DECADE), MAX: parameter maximum value, DECADE: value change in decade mode or not. 
     #             'set_smf' : effector setting function for SMF player
     #             'set_midi': effector setting function for MIDI IN player
-    enc_parameter_info = [
+    self.enc_parameter_info = [
         {'title': 'REVERB',  'key': 'reverb',  'params': [{'label': 'PROG', 'value': (  7,False)}, {'label': 'LEVL', 'value': (127,True)}, {'label': 'FDBK', 'value': (255,True)}],                                         'set_smf': smf_player_obj.set_smf_reverb,  'set_midi': midi_in_player_obj.set_midi_in_reverb },
         {'title': 'CHORUS',  'key': 'chorus',  'params': [{'label': 'PROG', 'value': (  7,False)}, {'label': 'LEVL', 'value': (127,True)}, {'label': 'FDBK', 'value': (255,True)}, {'label': 'DELY', 'value': (255,True)}], 'set_smf': smf_player_obj.set_smf_chorus,  'set_midi': midi_in_player_obj.set_midi_in_chorus },
         {'title': 'VIBRATE', 'key': 'vibrate', 'params': [{'label': 'RATE', 'value': (127,True )}, {'label': 'DEPT', 'value': (127,True)}, {'label': 'DELY', 'value': (127,True)}],                                         'set_smf': smf_player_obj.set_smf_vibrate, 'set_midi': midi_in_player_obj.set_midi_in_vibrate}
       ]
 
     # Number of effector parameters
-    for effector in enc_parameter_info:
-      enc_total_parameters = enc_total_parameters + len(effector['params'])
+    for effector in self.enc_parameter_info:
+      self.enc_total_parameters = self.enc_total_parameters + len(effector['params'])
 
     midi_in_settings = midi_in_player_obj.get_midi_in_setting()
     midi_obj.set_instrument(midi_in_settings[midi_in_player_obj.midi_in_channel()]['gmbank'], midi_in_player_obj.midi_in_channel(), midi_in_settings[midi_in_player_obj.midi_in_channel()]['program'])
@@ -3104,14 +3116,7 @@ class unit5c2_synth_application_class(message_center_class):
     # Initialize GUI display
     title_smf.setText('SMF PLAYER')
     title_smf_params.setText('NO. TRN VOL TEMP PARM VAL')
-    title_midi_in.setText('MIDI-IN PLAYER')
-    title_midi_in_params.setText('NO. FIL  MCH PROG PARM VAL')
     title_general.setText('VOL')
-
-    label_midi_in_set.setText('{:03d}'.format(midi_in_player_obj.set_midi_in_set_num()))
-    label_midi_in_set_ctrl.setText(self.enc_midi_set_ctrl_list[self.enc_midi_set_ctrl])
-    label_midi_in.setText('*')
-    label_midi_in.setVisible(False)
 
     master_volume = self.midi_obj.get_master_volume()
     midi_in_player_obj.set_synth_master_volume(0)
@@ -3134,23 +3139,12 @@ class unit5c2_synth_application_class(message_center_class):
     midi_in_player_obj.set_midi_in_program(0)
     #midi_in_player_obj.set_midi_in_reverb()
     #midi_in_player_obj.set_midi_in_chorus()
-    label_smf_parm_title.setText(enc_parameter_info[enc_parm]['title'])
-    label_smf_parameter.setText(enc_parameter_info[enc_parm]['params'][0]['label'])
+    label_smf_parm_title.setText(self.enc_parameter_info[self.enc_parm]['title'])
+    label_smf_parameter.setText(self.enc_parameter_info[self.enc_parm]['params'][0]['label'])
     smf_settings = smf_player_obj.get_smf_settings()
     label_smf_parm_value.setText('{:03d}'.format(smf_settings['reverb'][0]))
     label_smf_parameter.setColor(0x00ffcc, 0x222222)
     label_smf_parm_value.setColor(0xffffff, 0x222222)
-
-    label_midi_parm_title.setText(enc_parameter_info[enc_parm]['title'])
-    label_midi_parameter.setText(enc_parameter_info[enc_parm]['params'][0]['label'])
-    midi_in_settings = midi_in_player_obj.get_midi_in_setting()
-    label_midi_parm_value.setText('{:03d}'.format(midi_in_settings[midi_in_player_obj.midi_in_channel()]['reverb'][0]))
-    label_midi_parameter.setColor(0x00ffcc, 0x222222)
-    label_midi_parm_value.setColor(0xffffff, 0x222222)
-
-    # Initialize 8encoder
-    for ch in range(1,9):
-      encoder8_0.set_led_rgb(ch, 0x000000)
 
     # Prepare SYNTH data and all notes off
     midi_obj.set_all_notes_off()
@@ -3169,6 +3163,22 @@ class unit5c2_synth_application_class(message_center_class):
       midi_in_player_obj.send_all_midi_in_settings()
     else:
       print('MIDI IN SET: NO FILE')
+
+    # GUI for MIDI-IN Player draw
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'title_midi_in', 'value': 'MIDI-IN PLAYER'})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'title_midi_in_params', 'value': 'NO. FIL  MCH PROG PARM VAL'})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in_set', 'format': '{:03d}', 'value': midi_in_player_obj.set_midi_in_set_num()})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in_set_ctrl', 'value': self.enc_midi_set_ctrl_list[self.enc_midi_set_ctrl]})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parm_title', 'value': self.enc_parameter_info[self.enc_parm]['title']})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parameter', 'value': self.enc_parameter_info[self.enc_parm]['params'][0]['label']})
+
+    midi_in_settings = midi_in_player_obj.get_midi_in_setting()
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parm_value', 'format': '{:03d}', 'value': midi_in_settings[midi_in_player_obj.midi_in_channel()]['reverb'][0]})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_COLOR, {'label': 'label_midi_parameter', 'fore': 0x00ffcc, 'back': 0x222222})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_COLOR, {'label': 'label_midi_parm_value', 'fore': 0xffffff, 'back': 0x222222})
+
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in', 'value': '*'})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_in', 'visible': False})
 
   # Screen change
   def func_APPLICATION_SCREEN_CHANGE(self, message_data):
@@ -3202,8 +3212,10 @@ class unit5c2_synth_application_class(message_center_class):
       # Tile labels
       title_smf.setVisible(True)
       title_smf_params.setVisible(True)
-      title_midi_in.setVisible(True)
-      title_midi_in_params.setVisible(True)
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'title_midi_in', 'visible': True})
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'title_midi_in_params', 'visible': True})
+#      title_midi_in.setVisible(True)
+#      title_midi_in_params.setVisible(True)
       title_general.setVisible(True)
 
       # SMF data labels
@@ -3220,15 +3232,15 @@ class unit5c2_synth_application_class(message_center_class):
       label_smf_parm_title.setVisible(True)
 
       # MIDI data labels
-      label_midi_in_set.setVisible(True)
-      label_midi_in_set_ctrl.setVisible(True)
-      label_midi_in.setVisible(True)
-      label_channel.setVisible(True)
-      label_program.setVisible(True)
-      label_program_name.setVisible(True)
-      label_midi_parameter.setVisible(True)
-      label_midi_parm_value.setVisible(True)
-      label_midi_parm_title.setVisible(True)
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_in_set', 'visible': True})
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_in_set_ctrl', 'visible': True})
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_in', 'visible': True})
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_channel', 'visible': True})
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_program', 'visible': True})
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_program_name', 'visible': True})
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_parameter', 'visible': True})
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_parm_value', 'visible': True})
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_parm_title', 'visible': True})
 
       self.midi_in_player_obj.send_all_midi_in_settings()
 
@@ -3236,8 +3248,10 @@ class unit5c2_synth_application_class(message_center_class):
       # Tile labels
       title_smf.setVisible(False)
       title_smf_params.setVisible(False)
-      title_midi_in.setVisible(False)
-      title_midi_in_params.setVisible(False)
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'title_midi_in', 'visible': False})
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'title_midi_in_params', 'visible': False})
+#      title_midi_in.setVisible(False)
+#      title_midi_in_params.setVisible(False)
       title_general.setVisible(False)
 
       # SMF data labels
@@ -3254,15 +3268,15 @@ class unit5c2_synth_application_class(message_center_class):
       label_smf_parm_title.setVisible(False)
 
       # MIDI data labels
-      label_midi_in_set.setVisible(False)
-      label_midi_in_set_ctrl.setVisible(False)
-      label_midi_in.setVisible(False)
-      label_channel.setVisible(False)
-      label_program.setVisible(False)
-      label_program_name.setVisible(False)
-      label_midi_parameter.setVisible(False)
-      label_midi_parm_value.setVisible(False)
-      label_midi_parm_title.setVisible(False)
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_in_set', 'visible': False})
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_in_set_ctrl', 'visible': False})
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_in', 'visible': False})
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_channel', 'visible': False})
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_program', 'visible': False})
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_program_name', 'visible': False})
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_parameter', 'visible': False})
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_parm_value', 'visible': False})
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_parm_title', 'visible': False})
 
       # SEQUENCER title labels
       title_seq_track1.setVisible(True)
@@ -3301,15 +3315,79 @@ class unit5c2_synth_application_class(message_center_class):
 class device_8encoder_class(message_center_class):
   # Constructor
   def __init__(self, device_manager, message_center = None):
-    global encoder8_0
+    # Encoder number in slide switch on
+    #   11: CH1 .. 18: CH8
+    #   Change number, you can change function assignment channel.
+    self.ENC_SMF_FILE       = 11     # Select SMF file
+    self.ENC_SMF_TRANSPORSE = 12     # Set transpose for SMF player
+    self.ENC_SMF_VOLUME     = 13     # Set volume for SMF player
+    self.ENC_SMF_TEMPO      = 14     # Set tempo for SMF player
+    self.ENC_SMF_PARAMETER  = 15     # Select parameter to edit
+    self.ENC_SMF_CTRL       = 16     # Set effector parameter values
+    self.ENC_SMF_SCREEN     = 17     # not available
+    self.ENC_SMF_MASTER_VOL = 18     # Change master volume
+
+    # Encoder number in slide switch off
+    #   1: CH1 .. 8: CH8
+    #   Change number, you can change function assignment channel.
+    self.ENC_MIDI_SET        = 1     # Select MIDI setting file
+    self.ENC_MIDI_FILE       = 2     # File operation (load, save)
+    self.ENC_MIDI_CHANNEL    = 3     # Select MIDI channel to edit
+    self.ENC_MIDI_PROGRAM    = 4     # Select program for MIDI channel
+    self.ENC_MIDI_PARAMETER  = 5     # Select parameter to edit
+    self.ENC_MIDI_CTRL       = 6     # Set effector parameter values
+    self.ENC_MIDI_SCREEN     = 7     # not available
+    self.ENC_MIDI_MASTER_VOL = 8     # Change master volume
+
+    # Sequencer mode: Encoder number in slide switch off
+    #   1: CH1 .. 8: CH8
+    #   Change number, you can change function assignment channel.
+    #     TRACK1
+    self.ENC_SEQ_SET1        = 111   # Select MIDI setting file
+    self.ENC_SEQ_FILE1       = 112   # File operation (load, save)
+    self.ENC_SEQ_CURSOR1     = 113   # Move sequencer cursor
+    self.ENC_SEQ_NOTE_LEN1   = 114   # Set sequencer note length
+    self.ENC_SEQ_PARAMETER1  = 115   # Select parameter to edit
+    self.ENC_SEQ_CTRL1       = 116   # Set effector parameter values
+    self.ENC_SEQ_SCREEN1     = 117   # not available
+    self.ENC_SEQ_MASTER_VOL1 = 118   # Change master volume
+    #     TRACK2
+    self.ENC_SEQ_SET2        = 101   # Select MIDI setting file
+    self.ENC_SEQ_FILE2       = 102   # File operation (load, save)
+    self.ENC_SEQ_CURSOR2     = 103   # Move sequencer cursor
+    self.ENC_SEQ_NOTE_LEN2   = 104   # Set sequencer note length
+    self.ENC_SEQ_PARAMETER2  = 105   # Select parameter to edit
+    self.ENC_SEQ_CTRL2       = 106   # Set effector parameter values
+    self.ENC_SEQ_SCREEN2     = 107   # not available
+    self.ENC_SEQ_MASTER_VOL2 = 108   # Change master volume
+
+    # Sequencer file
+    self.SEQ_FILE_LOAD = 0
+    self.SEQ_FILE_SAVE = 1
+    self.SEQ_FILE_NOP  = 2
+
+    # Sequencer file
+    self.seq_file_number = 0                       # Sequencer file number
+    self.seq_file_ctrl = self.SEQ_FILE_NOP              # Currnet MIDI IN setting file operation id
+    self.seq_file_ctrl_label = ['L', 'S', '-']
+
+    # Change parameter value by decade or 1 (decade: True, 1: False)
+    self.enc_parm_decade = False                     # Change effector parameter values
+    self.enc_volume_decade = False                   # Change SMF volume
+    self.enc_mastervol_decade = False                # Change master volume
+    self.enc_midi_set_decade = False                 # Select MIDI IN setting file
+    self.enc_midi_prg_decade = False                 # Select program for MIDI IN channel
+
+    # Sequencer internal parameters
+    self.seq_cursor_time_or_key = True             # True: Move time cursor / False: Move key cursor
 
     # I2C
     i2c0 = I2C(0, scl=Pin(33), sda=Pin(32), freq=100000)
     i2c_list = i2c0.scan()
     print('I2C:', i2c_list)
-    encoder8_0 = Encoder8Unit(i2c0, 0x41)
+    self.encoder8_0 = Encoder8Unit(i2c0, 0x41)      # 8 Encoder object
     for enc_ch in range(1, 9):
-      encoder8_0.set_counter_value(enc_ch, 0)
+      self.encoder8_0.set_counter_value(enc_ch, 0)
 
     self.slide_switch_change = False
     self.slide_switch_value = None      # None: inii / Treu: Upper side / False: Lower side
@@ -3317,27 +3395,73 @@ class device_8encoder_class(message_center_class):
 
     self.enc_slide_switch = None     # 8encoder slide switch status (on:True, off:False)
 
+    device_manager.add_device(self)
     if not message_center is None:
       self.message_center = message_center
       self.message_center.add_contributor(self)
-      device_manager.add_device(self)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_PHONE_SEQ_TURN_OFF_PLAY_BUTTON, self.func_PHONE_SEQ_TURN_OFF_PLAY_BUTTON)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_PHONE_SEQ_GET_PAUSE_STOP_BUTTON, self.func_PHONE_SEQ_GET_PAUSE_STOP_BUTTON)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_PHONE_SEQ_STOP_BUTTON, self.func_PHONE_SEQ_STOP_BUTTON)
     else:
       self.message_center = self
+
+  def func_PHONE_SEQ_TURN_OFF_PLAY_BUTTON(self, message_data):
+    scan_enc_channel = self.ENC_SEQ_SET1 % 10
+    while self.encoder8_0.get_button_status(scan_enc_channel) == False:
+      time.sleep(0.1)
+
+    return True
+
+  def func_PHONE_SEQ_GET_PAUSE_STOP_BUTTON(self, message_data):
+    scan_enc_channel = self.ENC_SEQ_SET1 % 10
+    return not self.encoder8_0.get_button_status(scan_enc_channel)
+
+  def func_PHONE_SEQ_STOP_BUTTON(self, message_data):
+    scan_enc_channel = self.ENC_SEQ_SET1 % 10
+    count = -1
+    if self.encoder8_0.get_button_status(scan_enc_channel) == False:
+      # Stop sound
+      self.encoder8_0.set_led_rgb(scan_enc_channel, 0x40ff40)
+
+      # Wait for releasing the button
+      count = 0
+      while self.encoder8_0.get_button_status(scan_enc_channel) == False:
+        time.sleep(0.1)
+        count = count + 1
+        if count >= 10:
+          self.encoder8_0.set_led_rgb(scan_enc_channel, 0xff4040)
+
+      # Stop
+      if count >= 10:
+        self.encoder8_0.set_led_rgb(scan_enc_channel, 0x000000)
+        return count
+
+      # Pause
+      self.encoder8_0.set_led_rgb(scan_enc_channel, 0xffff00)
+      while self.encoder8_0.get_button_status(scan_enc_channel) == True:
+        time.sleep(0.1)
+
+      count = 0
+      while self.encoder8_0.get_button_status(scan_enc_channel) == False:
+        time.sleep(0.1)
+        count = count + 1
+        if count >= 10:
+          self.encoder8_0.set_led_rgb(scan_enc_channel, 0xff4040)
+
+      # Stop
+      self.encoder8_0.set_led_rgb(scan_enc_channel, 0x000000)
+      if count >= 10:
+        return count
+
+    return 0 if count > 0 else -1
 
   # Device controller
   #   Read input informatiom
   def controller(self):
-    global encoder8_0, enc_button_ch, enc_parm, enc_parm_decade, enc_volume_decade, enc_mastervol_decade
-    global enc_midi_set_decade, enc_midi_prg_decade
-    global enc_parameter_info, enc_total_parameters
-    global seq_cursor_time_or_key
-    global seq_file_number, seq_file_ctrl
-    global seq_parm
-
     # Slide switch
     self.slide_switch_change = False
     slide_switch_change = False                     ### TO BE DELETED
-    slide_switch = encoder8_0.get_switch_status()
+    slide_switch = self.encoder8_0.get_switch_status()
     if self.slide_switch_value is None:
       self.slide_switch_value = slide_switch
       self.enc_slide_switch = slide_switch               ### TO BE DELETED
@@ -3357,20 +3481,20 @@ class device_8encoder_class(message_center_class):
     # Scan encoders
     for enc_ch in range(1,9):
       enc_menu = enc_ch + (10 if self.slide_switch_value else 0) + (100 if application.is_sequencer_screen() else 0)
-      enc_count = encoder8_0.get_counter_value(enc_ch)
-      enc_button = not encoder8_0.get_button_status(enc_ch)
+      enc_count = self.encoder8_0.get_counter_value(enc_ch)
+      enc_button = not self.encoder8_0.get_button_status(enc_ch)
 
       # Get an edge trigger of the encoder button
       if enc_button == True:
-        if enc_button_ch[enc_ch-1] == True:
+        if self.enc_button_ch[enc_ch-1] == True:
           enc_button = False
         else:
-          enc_button_ch[enc_ch-1] = True
-          encoder8_0.set_led_rgb(enc_ch, 0x40ff40)
+          self.enc_button_ch[enc_ch-1] = True
+          self.encoder8_0.set_led_rgb(enc_ch, 0x40ff40)
       else:
-        if enc_button_ch[enc_ch-1] == True:
-          encoder8_0.set_led_rgb(enc_ch, 0x000000)
-          enc_button_ch[enc_ch-1] = False
+        if self.enc_button_ch[enc_ch-1] == True:
+          self.encoder8_0.set_led_rgb(enc_ch, 0x000000)
+          self.enc_button_ch[enc_ch-1] = False
 
       # Encoder rotations
       if enc_count >= 2:
@@ -3382,49 +3506,49 @@ class device_8encoder_class(message_center_class):
 
       # Reset the encoder counter
       if delta != 0:
-        encoder8_0.set_counter_value(enc_ch, 0)
+        self.encoder8_0.set_counter_value(enc_ch, 0)
 
 ######====== IMPLEMET NOT YET ======######
       ## PRE-PROCESS: Parameter encoder
-      if enc_menu == ENC_SMF_PARAMETER or enc_menu == ENC_MIDI_PARAMETER:
+      if enc_menu == self.ENC_SMF_PARAMETER or enc_menu == self.ENC_MIDI_PARAMETER:
         if delta != 0 or slide_switch_change:
           # Change the target parameter to edit with CTRL1
-          enc_parm = enc_parm + delta
-          if enc_parm < 0:
-            enc_parm = enc_total_parameters -1
-          elif enc_parm >= enc_total_parameters:
-            enc_parm = 0
+          application.enc_parm = application.enc_parm + delta
+          if application.enc_parm < 0:
+            application.enc_parm = application.enc_total_parameters -1
+          elif application.enc_parm >= application.enc_total_parameters:
+            application.enc_parm = 0
 
       ## PRE-PROCESS: Parameter control encoder
-      if enc_menu == ENC_SMF_CTRL or enc_menu == ENC_MIDI_CTRL:
+      if enc_menu == self.ENC_SMF_CTRL or enc_menu == self.ENC_MIDI_CTRL:
         # Decade value button (toggle)
-        if enc_button and enc_button_ch[enc_ch-1]:
-          enc_parm_decade = not enc_parm_decade
+        if enc_button and self.enc_button_ch[enc_ch-1]:
+          self.enc_parm_decade = not self.enc_parm_decade
 
-        if enc_parm_decade:
-          encoder8_0.set_led_rgb(enc_ch, 0xffa000)
+        if self.enc_parm_decade:
+          self.encoder8_0.set_led_rgb(enc_ch, 0xffa000)
 
       ## PRE-PROCESS: Sequencer parameter encoder
-      if enc_menu == ENC_SEQ_PARAMETER1 or enc_menu == ENC_SEQ_PARAMETER2:
+      if enc_menu == self.ENC_SEQ_PARAMETER1 or enc_menu == self.ENC_SEQ_PARAMETER2:
         if delta != 0 or slide_switch_change:
           # Change the target parameter to edit with CTRL1
-          seq_parm = seq_parm + delta
-          if seq_parm < 0:
-            seq_parm = seq_total_parameters -1
-          elif seq_parm >= seq_total_parameters:
-            seq_parm = 0
+          sequencer_obj.seq_parm = sequencer_obj.seq_parm + delta
+          if sequencer_obj.seq_parm < 0:
+            sequencer_obj.seq_parm = seq_total_parameters -1
+          elif sequencer_obj.seq_parm >= seq_total_parameters:
+            sequencer_obj.seq_parm = 0
 
       ## PRE-PROCESS: Parameter control encoder
-      if enc_menu == ENC_SEQ_CTRL1 or enc_menu == ENC_SEQ_CTRL2:
+      if enc_menu == self.ENC_SEQ_CTRL1 or enc_menu == self.ENC_SEQ_CTRL2:
         # Decade value button (toggle)
-        if enc_button and enc_button_ch[enc_ch-1]:
-          enc_parm_decade = not enc_parm_decade
+        if enc_button and self.enc_button_ch[enc_ch-1]:
+          self.enc_parm_decade = not self.enc_parm_decade
 
-        if enc_parm_decade:
-          encoder8_0.set_led_rgb(enc_ch, 0xffa000)
+        if self.enc_parm_decade:
+          self.encoder8_0.set_led_rgb(enc_ch, 0xffa000)
 
         # Show repeat sign parameter just after changing the current time
-        if seq_parm == SEQUENCER_PARM_REPEAT:
+        if sequencer_obj.seq_parm == sequencer_obj.SEQUENCER_PARM_REPEAT:
           if sequencer_obj.get_seq_parm_repeat() is None:
             sequencer_obj.set_seq_parm_repeat(sequencer_obj.get_seq_time_cursor())
             rept = sequencer_obj.sequencer_get_repeat_control(sequencer_obj.get_seq_parm_repeat())
@@ -3451,7 +3575,7 @@ class device_8encoder_class(message_center_class):
 
       ## MENU PROCESS
       # Select SMF file
-      if enc_menu == ENC_SMF_FILE:
+      if enc_menu == self.ENC_SMF_FILE:
           # Select a MIDI file
           if delta != 0:
             self.message_center.send_message(self, self.message_center.MSGID_CHANGE_SMF_FILE_NO, {'delta': delta})
@@ -3461,7 +3585,7 @@ class device_8encoder_class(message_center_class):
             self.message_center.send_message(self, self.message_center.MSGID_SMF_PLAYER_CONTROL, {'midi_in_player': midi_in_player_obj})
 
       # Set transpose for SMF player
-      elif enc_menu == ENC_SMF_TRANSPORSE:
+      elif enc_menu == self.ENC_SMF_TRANSPORSE:
         if delta != 0:
           midi_obj.set_all_notes_off()
           smf_player_obj.set_smf_transpose(delta)
@@ -3479,13 +3603,13 @@ class device_8encoder_class(message_center_class):
             print('MIDI PLAYER NOT PLAYING')
 
       # Set volume for SMF player
-      elif enc_menu == ENC_SMF_VOLUME:
+      elif enc_menu == self.ENC_SMF_VOLUME:
         # Decade value button (toggle)
-        if enc_button and enc_button_ch[enc_ch-1]:
-          enc_volume_decade = not enc_volume_decade
+        if enc_button and self.enc_button_ch[enc_ch-1]:
+          self.enc_volume_decade = not self.enc_volume_decade
 
-        if enc_volume_decade:
-          encoder8_0.set_led_rgb(enc_ch, 0xffa000)
+        if self.enc_volume_decade:
+          self.encoder8_0.set_led_rgb(enc_ch, 0xffa000)
 
         # Slide switch off: midi-in mode
         if slide_switch == False:
@@ -3494,10 +3618,10 @@ class device_8encoder_class(message_center_class):
         # Slide switch on: SMF player mode
         else:
           if delta != 0:
-            smf_player_obj.set_smf_volume_delta(delta * (10 if enc_volume_decade else 1))
+            smf_player_obj.set_smf_volume_delta(delta * (10 if self.enc_volume_decade else 1))
 
       # Set tempo for SMF player
-      elif enc_menu == ENC_SMF_TEMPO:
+      elif enc_menu == self.ENC_SMF_TEMPO:
         # Change MIDI play speed
         spf = smf_player_obj.set_smf_speed_factor()
         if delta == -1:
@@ -3514,10 +3638,10 @@ class device_8encoder_class(message_center_class):
           label_smf_tempo.setText('x{:3.1f}'.format(spf))
 
       # Select parameter to edit
-      elif enc_menu == ENC_SMF_PARAMETER:
+      elif enc_menu == self.ENC_SMF_PARAMETER:
         if delta != 0 or slide_switch_change:
           # Get parameter info of enc_parm
-          (effector, prm_index) = self.get_enc_param_index(enc_parm)
+          (effector, prm_index) = application.get_enc_param_index(application.enc_parm)
           if not effector is None:
             pttl = effector['title']
             plbl = effector['params'][prm_index]['label']
@@ -3534,13 +3658,13 @@ class device_8encoder_class(message_center_class):
           label_smf_parm_value.setText('{:03d}'.format(disp))
 
       # Set parameter value
-      elif enc_menu == ENC_SMF_CTRL:
+      elif enc_menu == self.ENC_SMF_CTRL:
         if delta != 0 or slide_switch_change:
           # Get parameter info of enc_parm
-          (effector, prm_index) = self.get_enc_param_index(enc_parm)
+          (effector, prm_index) = application.get_enc_param_index(application.enc_parm)
           if not effector is None:
             smf_settings = smf_player_obj.get_smf_settings()
-            val = smf_settings[effector['key']][prm_index] + delta * (10 if enc_parm_decade and effector['params'][prm_index]['value'][1] else 1)
+            val = smf_settings[effector['key']][prm_index] + delta * (10 if self.enc_parm_decade and effector['params'][prm_index]['value'][1] else 1)
             if val < 0:
               val = effector['params'][prm_index]['value'][0]
             elif val > effector['params'][prm_index]['value'][0]:
@@ -3558,31 +3682,31 @@ class device_8encoder_class(message_center_class):
           label_smf_parm_value.setText('{:03d}'.format(disp))
 
       # Select MIDI setting file
-      elif enc_menu == ENC_MIDI_SET:
+      elif enc_menu == self.ENC_MIDI_SET:
         # Decade value button (toggle)
-        if enc_button and enc_button_ch[enc_ch-1]:
-          enc_midi_set_decade = not enc_midi_set_decade
+        if enc_button and self.enc_button_ch[enc_ch-1]:
+          self.enc_midi_set_decade = not self.enc_midi_set_decade
 
-        if enc_midi_set_decade:
-          encoder8_0.set_led_rgb(enc_ch, 0xffa000)
+        if self.enc_midi_set_decade:
+          self.encoder8_0.set_led_rgb(enc_ch, 0xffa000)
 
         # File number
         if delta != 0:
-          num = midi_in_player_obj.set_midi_in_set_num(midi_in_player_obj.set_midi_in_set_num() + delta * (10 if enc_midi_set_decade else 1))
-          label_midi_in_set.setText('{:03d}'.format(num))
+          num = midi_in_player_obj.set_midi_in_set_num(midi_in_player_obj.set_midi_in_set_num() + delta * (10 if self.enc_midi_set_decade else 1))
+          self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in_set', 'format': '{:03d}','value': num})
 
       # File operation (read/write)
-      elif enc_menu == ENC_MIDI_FILE:
+      elif enc_menu == self.ENC_MIDI_FILE:
         # File control
         if delta != 0:
           self.message_center.send_message(self, self.message_center.MSGID_MIDI_FILE_OPERATION, {'delta': delta})
 
         # File operation button
-        if enc_button and enc_button_ch[enc_ch-1]:
+        if enc_button and self.enc_button_ch[enc_ch-1]:
           self.message_center.send_message(self, self.message_center.MSGID_MIDI_FILE_LOAD_SAVE, None)
 
       # Select MIDI channel to edit
-      elif enc_menu == ENC_MIDI_CHANNEL:
+      elif enc_menu == self.ENC_MIDI_CHANNEL:
         # Select MIDI channel to MIDI-IN play
         if delta != 0:
           self.message_center.send_message(self, message_center.MSGID_SET_MIDI_IN_CHANNEL, {'delta': delta})
@@ -3592,27 +3716,27 @@ class device_8encoder_class(message_center_class):
           midi_obj.set_all_notes_off(midi_in_player_obj.midi_in_channel())
 
       # Select program for MIDI channel
-      elif enc_menu == ENC_MIDI_PROGRAM:
+      elif enc_menu == self.ENC_MIDI_PROGRAM:
         # Decade value button (toggle)
-        if enc_button and enc_button_ch[enc_ch-1]:
-          enc_midi_prg_decade = not enc_midi_prg_decade
+        if enc_button and self.enc_button_ch[enc_ch-1]:
+          self.enc_midi_prg_decade = not self.enc_midi_prg_decade
 
-        if enc_midi_prg_decade:
-          encoder8_0.set_led_rgb(enc_ch, 0xffa000)
+        if self.enc_midi_prg_decade:
+          self.encoder8_0.set_led_rgb(enc_ch, 0xffa000)
 
         # Select program
         if delta != 0:
-          midi_in_player_obj.set_midi_in_program(delta * (10 if enc_midi_prg_decade else 1))
+          midi_in_player_obj.set_midi_in_program(delta * (10 if self.enc_midi_prg_decade else 1))
 
         # All notes off of MIDI-IN player channel
         if enc_button == True:
           midi_obj.set_all_notes_off(midi_in_player_obj.midi_in_channel())
 
       # Select parameter to edit
-      elif enc_menu == ENC_MIDI_PARAMETER:
+      elif enc_menu == self.ENC_MIDI_PARAMETER:
         if delta != 0 or slide_switch_change:
           # Get parameter info of enc_parm
-          (effector, prm_index) = self.get_enc_param_index(enc_parm)
+          (effector, prm_index) = application.get_enc_param_index(application.enc_parm)
           if not effector is None:
             pttl = effector['title']
             plbl = effector['params'][prm_index]['label']
@@ -3624,18 +3748,18 @@ class device_8encoder_class(message_center_class):
             disp = 999
 
           # Display the parameter
-          label_midi_parm_title.setText(pttl)
-          label_midi_parameter.setText(plbl)
-          label_midi_parm_value.setText('{:03d}'.format(disp))
+          self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parm_title', 'value': pttl})
+          self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parameter', 'value': plbl})
+          self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parm_value', 'format': '{:03d}', 'value': disp})
 
       # Set parameter value
-      elif enc_menu == ENC_MIDI_CTRL:
+      elif enc_menu == self.ENC_MIDI_CTRL:
         if delta != 0 or slide_switch_change:
           # Get parameter info of enc_parm
-          (effector, prm_index) = self.get_enc_param_index(enc_parm)
+          (effector, prm_index) = application.get_enc_param_index(application.enc_parm)
           if not effector is None:
             midi_in_settings = midi_in_player_obj.get_midi_in_setting()
-            val = midi_in_settings[midi_in_player_obj.midi_in_channel()][effector['key']][prm_index] + delta * (10 if enc_parm_decade and effector['params'][prm_index]['value'][1] else 1)
+            val = midi_in_settings[midi_in_player_obj.midi_in_channel()][effector['key']][prm_index] + delta * (10 if self.enc_parm_decade and effector['params'][prm_index]['value'][1] else 1)
             if val < 0:
               val = effector['params'][prm_index]['value'][0]
             elif val > effector['params'][prm_index]['value'][0]:
@@ -3650,20 +3774,20 @@ class device_8encoder_class(message_center_class):
             disp = 999
 
           # Display the label
-          label_midi_parm_value.setText('{:03d}'.format(disp))
+          self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parm_value', 'format': '{:03d}', 'value': disp})
 
       # Change master volume
-      elif enc_menu == ENC_SMF_MASTER_VOL or enc_menu == ENC_MIDI_MASTER_VOL or enc_menu == ENC_SEQ_MASTER_VOL1 or enc_menu == ENC_SEQ_MASTER_VOL2:
+      elif enc_menu == self.ENC_SMF_MASTER_VOL or enc_menu == self.ENC_MIDI_MASTER_VOL or enc_menu == self.ENC_SEQ_MASTER_VOL1 or enc_menu == self.ENC_SEQ_MASTER_VOL2:
         # Decade value button (toggle)
-        if enc_button and enc_button_ch[enc_ch-1]:
-          enc_mastervol_decade = not enc_mastervol_decade
+        if enc_button and self.enc_button_ch[enc_ch-1]:
+          self.enc_mastervol_decade = not self.enc_mastervol_decade
 
-        if enc_mastervol_decade:
-          encoder8_0.set_led_rgb(enc_ch, 0xffa000)
+        if self.enc_mastervol_decade:
+          self.encoder8_0.set_led_rgb(enc_ch, 0xffa000)
 
         # Change master volume
         if delta != 0: 
-            master_volume_delta = delta * (10 if enc_mastervol_decade else 1)
+            master_volume_delta = delta * (10 if self.enc_mastervol_decade else 1)
             midi_in_player_obj.set_synth_master_volume(master_volume_delta)
             self.message_center.send_message(self, self.message_center.MSGID_SHOW_MASTER_VOLUME_VALUE, None)
 
@@ -3674,7 +3798,7 @@ class device_8encoder_class(message_center_class):
       ##### COMMON #####
 
       # Change screen mode
-      elif enc_menu == ENC_SMF_SCREEN or enc_menu == ENC_MIDI_SCREEN or enc_menu == ENC_SEQ_SCREEN1 or enc_menu == ENC_SEQ_SCREEN2:
+      elif enc_menu == self.ENC_SMF_SCREEN or enc_menu == self.ENC_MIDI_SCREEN or enc_menu == self.ENC_SEQ_SCREEN1 or enc_menu == self.ENC_SEQ_SCREEN2:
         if delta != 0:
           self.message_center.send_message(self, self.message_center.MSGID_APPLICATION_SCREEN_CHANGE, {'delta': delta})
           self.message_center.flush_messages()
@@ -3683,10 +3807,10 @@ class device_8encoder_class(message_center_class):
       ##### SEQUENCER SREEN MODE #####
 
       # Select file / Play or Stop
-      elif  enc_menu == ENC_SEQ_SET1 or enc_menu == ENC_SEQ_SET2:
+      elif  enc_menu == self.ENC_SEQ_SET1 or enc_menu == self.ENC_SEQ_SET2:
         if delta != 0:
-          seq_file_number = (seq_file_number + delta) % sequencer_obj.SEQ_FILE_MAX
-          label_seq_file.setText('{:03d}'.format(seq_file_number))
+          self.seq_file_number = (self.seq_file_number + delta) % sequencer_obj.SEQ_FILE_MAX
+          label_seq_file.setText('{:03d}'.format(self.seq_file_number))
 
         if enc_button:
           sequencer_obj.send_all_sequencer_settings()
@@ -3694,34 +3818,34 @@ class device_8encoder_class(message_center_class):
           sequencer_obj.send_sequencer_current_channel_settings(sequencer_obj.get_track_midi())
 
       # File operation
-      elif  enc_menu == ENC_SEQ_FILE1 or enc_menu == ENC_SEQ_FILE2:
+      elif  enc_menu == self.ENC_SEQ_FILE1 or enc_menu == self.ENC_SEQ_FILE2:
         if delta != 0:
-          seq_file_ctrl = (seq_file_ctrl + delta) % 3
-          label_seq_file_op.setText(seq_file_ctrl_label[seq_file_ctrl])
+          self.seq_file_ctrl = (self.seq_file_ctrl + delta) % 3
+          label_seq_file_op.setText(self.seq_file_ctrl_label[self.seq_file_ctrl])
 
         if enc_button:
-          if seq_file_ctrl == SEQ_FILE_LOAD:
-            sequencer_obj.sequencer_load_file(sequencer_obj.set_sequencer_file_path(), seq_file_number)
+          if self.seq_file_ctrl == self.SEQ_FILE_LOAD:
+            sequencer_obj.sequencer_load_file(sequencer_obj.set_sequencer_file_path(), self.seq_file_number)
             self.enc_slide_switch = None
-            seq_file_ctrl = SEQ_FILE_NOP
-            label_seq_file_op.setText(seq_file_ctrl_label[seq_file_ctrl])
+            self.seq_file_ctrl = self.SEQ_FILE_NOP
+            label_seq_file_op.setText(self.seq_file_ctrl_label[self.seq_file_ctrl])
 
-          elif seq_file_ctrl == SEQ_FILE_SAVE:
-            sequencer_obj.sequencer_save_file(sequencer_obj.set_sequencer_file_path(), seq_file_number)
-            seq_file_ctrl = SEQ_FILE_NOP
-            label_seq_file_op.setText(seq_file_ctrl_label[seq_file_ctrl])
+          elif self.seq_file_ctrl == self.SEQ_FILE_SAVE:
+            sequencer_obj.sequencer_save_file(sequencer_obj.set_sequencer_file_path(), self.seq_file_number)
+            self.seq_file_ctrl = self.SEQ_FILE_NOP
+            label_seq_file_op.setText(self.seq_file_ctrl_label[self.seq_file_ctrl])
 
       # Move sequencer cursor
-      elif enc_menu == ENC_SEQ_CURSOR1 or enc_menu == ENC_SEQ_CURSOR2:
+      elif enc_menu == self.ENC_SEQ_CURSOR1 or enc_menu == self.ENC_SEQ_CURSOR2:
         # Sequencer cursor is time or key (toggle)
-        if enc_button and enc_button_ch[enc_ch-1]:
-          seq_cursor_time_or_key = not seq_cursor_time_or_key
+        if enc_button and self.enc_button_ch[enc_ch-1]:
+          self.seq_cursor_time_or_key = not self.seq_cursor_time_or_key
 
         if delta != 0:
           sequencer_obj.seq_show_cursor(sequencer_obj.edit_track(), False, False)
 
           # Move time cursor
-          if seq_cursor_time_or_key:
+          if self.seq_cursor_time_or_key:
             sequencer_obj.set_seq_time_cursor(sequencer_obj.get_seq_time_cursor() + delta)
             if sequencer_obj.get_seq_time_cursor() < 0:
               sequencer_obj.set_seq_time_cursor(0)
@@ -3770,13 +3894,13 @@ class device_8encoder_class(message_center_class):
               if cursor_note != seq_cursor_note:
                 score = seq_cursor_note[0]
                 note_data = seq_cursor_note[1]
-                if seq_parm != SEQUENCER_PARM_VELOCITY:
+                if sequencer_obj.seq_parm != sequencer_obj.SEQUENCER_PARM_VELOCITY:
                   sequencer_obj.sequencer_draw_note(sequencer_obj.edit_track(), note_data['note'], score['time'], score['time'] + note_data['duration'], sequencer_obj.SEQ_NOTE_DISP_NORMAL)
 
             sequencer_obj.set_cursor_note(cursor_note)
             score = sequencer_obj.get_cursor_note(0)
             note_data = sequencer_obj.get_cursor_note(1)
-            if seq_parm != SEQUENCER_PARM_VELOCITY:
+            if sequencer_obj.seq_parm != sequencer_obj.SEQUENCER_PARM_VELOCITY:
               sequencer_obj.sequencer_draw_note(sequencer_obj.edit_track(), note_data['note'], score['time'], score['time'] + note_data['duration'], sequencer_obj.SEQ_NOTE_DISP_HIGHLIGHT)
             else:
               sequencer_obj.sequencer_draw_track(sequencer_obj.edit_track())
@@ -3785,7 +3909,7 @@ class device_8encoder_class(message_center_class):
           elif not sequencer_obj.get_cursor_note() is None:
             score = sequencer_obj.get_cursor_note(0)
             note_data = sequencer_obj.get_cursor_note(1)
-            if seq_parm != SEQUENCER_PARM_VELOCITY:
+            if sequencer_obj.seq_parm != sequencer_obj.SEQUENCER_PARM_VELOCITY:
               sequencer_obj.sequencer_draw_note(sequencer_obj.edit_track(), note_data['note'], score['time'], score['time'] + note_data['duration'], sequencer_obj.SEQ_NOTE_DISP_NORMAL)
               sequencer_obj.set_cursor_note(None)
             else:
@@ -3793,7 +3917,7 @@ class device_8encoder_class(message_center_class):
               sequencer_obj.sequencer_draw_track(sequencer_obj.edit_track())
 
       # Set sequencer note length
-      elif enc_menu == ENC_SEQ_NOTE_LEN1 or enc_menu == ENC_SEQ_NOTE_LEN2:
+      elif enc_menu == self.ENC_SEQ_NOTE_LEN1 or enc_menu == self.ENC_SEQ_NOTE_LEN2:
         # Hignlited note exists
         if not sequencer_obj.get_cursor_note() is None:
           if delta != 0:
@@ -3831,20 +3955,20 @@ class device_8encoder_class(message_center_class):
             sequencer_obj.sequencer_draw_track(1)
 
       # Select sequencer parameter to edit
-      elif enc_menu == ENC_SEQ_PARAMETER1 or enc_menu == ENC_SEQ_PARAMETER2:
+      elif enc_menu == self.ENC_SEQ_PARAMETER1 or enc_menu == self.ENC_SEQ_PARAMETER2:
         if delta != 0 or slide_switch_change:
-          label_seq_parm_name.setText(seq_parameter_names[seq_parm])
+          label_seq_parm_name.setText(application.seq_parameter_names[sequencer_obj.seq_parm])
 
           # Show parameter value
-          if   seq_parm == SEQUENCER_PARM_TIMESPAN:
+          if   sequencer_obj.seq_parm == sequencer_obj.SEQUENCER_PARM_TIMESPAN:
             label_seq_parm_value.setText('{:03d}'.format(sequencer_obj.get_seq_disp_time(1) - sequencer_obj.get_seq_disp_time(0)))
-          elif seq_parm == SEQUENCER_PARM_TEMPO:
+          elif sequencer_obj.seq_parm == sequencer_obj.SEQUENCER_PARM_TEMPO:
             label_seq_parm_value.setText('{:03d}'.format(sequencer_obj.get_seq_tempo()))
-          elif seq_parm == SEQUENCER_PARM_MINIMUM_NOTE:
+          elif sequencer_obj.seq_parm == sequencer_obj.SEQUENCER_PARM_MINIMUM_NOTE:
             label_seq_parm_value.setText('{:=2d}'.format(2**sequencer_obj.get_seq_mini_note()))
-          elif seq_parm == SEQUENCER_PARM_PROGRAM:
+          elif sequencer_obj.seq_parm == sequencer_obj.SEQUENCER_PARM_PROGRAM:
             label_seq_parm_value.setText('{:03d}'.format(sequencer_obj.get_seq_program(sequencer_obj.get_track_midi())))
-          elif seq_parm == SEQUENCER_PARM_CHANNEL_VOL:
+          elif sequencer_obj.seq_parm == sequencer_obj.SEQUENCER_PARM_CHANNEL_VOL:
             label_seq_parm_value.setText('{:03d}'.format(sequencer_obj.get_seq_channel(sequencer_obj.get_track_midi(), 'volume')))
           else:
             label_seq_parm_value.setText('')
@@ -3853,25 +3977,25 @@ class device_8encoder_class(message_center_class):
           sequencer_obj.sequencer_draw_track(1)
 
       # Set sequencer parameter value
-      elif enc_menu == ENC_SEQ_CTRL1 or enc_menu == ENC_SEQ_CTRL2:
+      elif enc_menu == self.ENC_SEQ_CTRL1 or enc_menu == self.ENC_SEQ_CTRL2:
         if delta != 0 or slide_switch_change:
           # Change MIDI channel of the current track
-          if   seq_parm == SEQUENCER_PARM_CHANNEL:
+          if   sequencer_obj.seq_parm == sequencer_obj.SEQUENCER_PARM_CHANNEL:
             sequencer_obj.sequencer_change_midi_channel(delta)
 
           # Change time span
-          elif seq_parm == SEQUENCER_PARM_TIMESPAN:
+          elif sequencer_obj.seq_parm == sequencer_obj.SEQUENCER_PARM_TIMESPAN:
             sequencer_obj.sequencer_timespan(delta)
             label_seq_parm_value.setText('{:03d}'.format(sequencer_obj.get_seq_disp_time(1) - sequencer_obj.get_seq_disp_time(0)))
 
           # Change velocity of the note selected
-          elif seq_parm == SEQUENCER_PARM_VELOCITY:
-            if sequencer_obj.sequencer_velocity(delta * (10 if enc_parm_decade else 1)):
+          elif sequencer_obj.seq_parm == sequencer_obj.SEQUENCER_PARM_VELOCITY:
+            if sequencer_obj.sequencer_velocity(delta * (10 if self.enc_parm_decade else 1)):
               sequencer_obj.sequencer_draw_track(sequencer_obj.edit_track())
 
           # Change start time to begining play
-          elif seq_parm == SEQUENCER_PARM_PLAYSTART:
-            pt = sequencer_obj.play_time(0) + delta * (10 if enc_parm_decade else 1)
+          elif sequencer_obj.seq_parm == sequencer_obj.SEQUENCER_PARM_PLAYSTART:
+            pt = sequencer_obj.play_time(0) + delta * (10 if self.enc_parm_decade else 1)
             print('PLAY S:', pt, delta, sequencer_obj.play_time())
             if pt >= 0 and pt <= sequencer_obj.play_time(1):
               sequencer_obj.play_time(0, pt)
@@ -3879,8 +4003,8 @@ class device_8encoder_class(message_center_class):
               sequencer_obj.sequencer_draw_playtime(1)
 
           # Change end time to finish play
-          elif seq_parm == SEQUENCER_PARM_PLAYEND:
-            pt = sequencer_obj.play_time(1) + delta * (10 if enc_parm_decade else 1)
+          elif sequencer_obj.seq_parm == sequencer_obj.SEQUENCER_PARM_PLAYEND:
+            pt = sequencer_obj.play_time(1) + delta * (10 if self.enc_parm_decade else 1)
             print('PLAY E:', pt, delta, sequencer_obj.play_time())
             if pt >= sequencer_obj.play_time(0):
               sequencer_obj.play_time(1, pt)
@@ -3888,7 +4012,7 @@ class device_8encoder_class(message_center_class):
               sequencer_obj.sequencer_draw_playtime(1)
 
           # Insert/Delete time at the time cursor on the current MIDI channel only
-          elif seq_parm == SEQUENCER_PARM_STRETCH_ONE:
+          elif sequencer_obj.seq_parm == sequencer_obj.SEQUENCER_PARM_STRETCH_ONE:
             affected = False
 
             # Insert
@@ -3910,7 +4034,7 @@ class device_8encoder_class(message_center_class):
               sequencer_obj.seq_show_cursor(sequencer_obj.edit_track(), True, True)
 
           # Insert/Delete time at the time cursor on the all MIDI channels
-          elif seq_parm == SEQUENCER_PARM_STRETCH_ALL:
+          elif sequencer_obj.seq_parm == sequencer_obj.SEQUENCER_PARM_STRETCH_ALL:
             affected = False
 
             # Insert
@@ -3937,7 +4061,7 @@ class device_8encoder_class(message_center_class):
               sequencer_obj.seq_show_cursor(1, True, True)
 
           # Clear all notes in the current MIDI channel
-          elif seq_parm == SEQUENCER_PARM_CLEAR_ONE:
+          elif sequencer_obj.seq_parm == sequencer_obj.SEQUENCER_PARM_CLEAR_ONE:
             if delta != 0:
               to_delete = []
               for score in sequencer_obj.get_seq_score():
@@ -3953,7 +4077,7 @@ class device_8encoder_class(message_center_class):
               sequencer_obj.sequencer_draw_playtime(sequencer_obj.edit_track())
 
           # Clear all notes in the all MIDI channel
-          elif seq_parm == SEQUENCER_PARM_CLEAR_ALL:
+          elif sequencer_obj.seq_parm == sequencer_obj.SEQUENCER_PARM_CLEAR_ALL:
             if delta != 0:
               sequencer_obj.clear_seq_score()
               sequencer_obj.set_cursor_note(None)
@@ -3963,14 +4087,14 @@ class device_8encoder_class(message_center_class):
               sequencer_obj.sequencer_draw_playtime(1)
 
           # Change number of notes in a bar
-          elif seq_parm == SEQUENCER_PARM_NOTES_BAR:
+          elif sequencer_obj.seq_parm == sequencer_obj.SEQUENCER_PARM_NOTES_BAR:
             if delta != 0:
               sequencer_obj.set_seq_time_per_bar(sequencer_obj.get_seq_time_per_bar() + delta)
               sequencer_obj.sequencer_draw_track(0)
               sequencer_obj.sequencer_draw_track(1)
 
           # Resolution up
-          elif seq_parm == SEQUENCER_PARM_RESOLUTION:
+          elif sequencer_obj.seq_parm == sequencer_obj.SEQUENCER_PARM_RESOLUTION:
             if delta != 0:
               sequencer_obj.sequencer_resolution(delta > 0)
 
@@ -3983,21 +4107,21 @@ class device_8encoder_class(message_center_class):
               sequencer_obj.seq_show_cursor(1, True, True)
 
           # Change number of notes in a bar
-          elif seq_parm == SEQUENCER_PARM_TEMPO:
+          elif sequencer_obj.seq_parm == sequencer_obj.SEQUENCER_PARM_TEMPO:
             if delta != 0:
-              sequencer_obj.set_seq_tempo(sequencer_obj.get_seq_tempo() + delta * (10 if enc_parm_decade else 1))
+              sequencer_obj.set_seq_tempo(sequencer_obj.get_seq_tempo() + delta * (10 if self.enc_parm_decade else 1))
               label_seq_parm_value.setText('{:03d}'.format(sequencer_obj.get_seq_tempo()))
 
           # Change number of notes in a bar
-          elif seq_parm == SEQUENCER_PARM_MINIMUM_NOTE:
+          elif sequencer_obj.seq_parm == sequencer_obj.SEQUENCER_PARM_MINIMUM_NOTE:
             if delta != 0:
               sequencer_obj.set_seq_mini_note(sequencer_obj.get_seq_mini_note() + delta)
               label_seq_parm_value.setText('{:=2d}'.format(2**sequencer_obj.get_seq_mini_note()))
 
           # Change MIDI channnel program
-          elif seq_parm == SEQUENCER_PARM_PROGRAM:
+          elif sequencer_obj.seq_parm == sequencer_obj.SEQUENCER_PARM_PROGRAM:
             ch = sequencer_obj.get_track_midi()
-            sequencer_obj.set_seq_program(ch, sequencer_obj.get_seq_program(ch) + delta * (10 if enc_parm_decade else 1))
+            sequencer_obj.set_seq_program(ch, sequencer_obj.get_seq_program(ch) + delta * (10 if self.enc_parm_decade else 1))
             label_seq_parm_value.setText('{:03d}'.format(sequencer_obj.get_seq_program(ch)))
             prg = midi_obj.get_gm_program_name(sequencer_obj.get_seq_gmbank(ch), sequencer_obj.get_seq_program(ch))
             prg = prg[:9]
@@ -4011,10 +4135,10 @@ class device_8encoder_class(message_center_class):
             sequencer_obj.send_sequencer_current_channel_settings(ch)
 
           # Change a volume ratio of MIDI channel
-          elif seq_parm == SEQUENCER_PARM_CHANNEL_VOL:
+          elif sequencer_obj.seq_parm == sequencer_obj.SEQUENCER_PARM_CHANNEL_VOL:
             ch = sequencer_obj.get_track_midi()
             vol = sequencer_obj.get_seq_channel(ch, 'volume')
-            vol = vol + delta * (10 if enc_parm_decade else 1)
+            vol = vol + delta * (10 if self.enc_parm_decade else 1)
             if vol < 0:
               vol = 0
             elif vol > 100:
@@ -4024,7 +4148,7 @@ class device_8encoder_class(message_center_class):
             label_seq_parm_value.setText('{:03d}'.format(vol))
 
           # Set repeat signs (NONE/LOOP/SKIP/REPEAT)
-          elif seq_parm == SEQUENCER_PARM_REPEAT:
+          elif sequencer_obj.seq_parm == sequencer_obj.SEQUENCER_PARM_REPEAT:
             if sequencer_obj.get_seq_parm_repeat() is None:
               label_seq_parm_value.setText('NON')
 
@@ -4078,20 +4202,6 @@ class device_8encoder_class(message_center_class):
               sequencer_obj.sequencer_draw_track(1)
 
 
-  # Get a parameter info array and parameter('params') index in the info.
-  def get_enc_param_index(self, idx):
-    pfrom = 0
-    pto = -1
-    for effector in enc_parameter_info:
-      pnum = len(effector['params'])
-      pfrom = pto + 1
-      pto = pfrom + pnum - 1
-      if pfrom <= idx and idx <= pto:
-        return (effector, idx - pfrom)
-
-    return (None, -1)
-
-
 ################# End of 8Encoder Device Class Definition #################
 
 
@@ -4102,7 +4212,11 @@ def loop():
   M5.update()
 
   # Player mode
-  midi_obj.midi_in_out()
+  if midi_obj.midi_in_out():
+    application.message_center.phone_message(application, application.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in', 'value': '*'})
+  else:
+    application.message_center.phone_message(application, application.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in', 'value': ''})
+
   device_manager.device_control()
   message_center.deliver_message()
 
@@ -4129,6 +4243,7 @@ if __name__ == '__main__':
 
     # MIDI-IN Player object
     midi_in_player_obj = midi_in_player_class(midi_obj, sdcard_obj)
+    view_midi_in_player = view_midi_in_player_class(midi_in_player_obj, message_center)
 
     # Standard MIDI Player object
     smf_player_obj = smf_player_class(midi_obj, message_center)
