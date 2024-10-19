@@ -220,10 +220,15 @@ class message_definitions():
     self.MSGID_SEQUENCER_ACTIVATED = 5
     self.MSGID_SHOW_MASTER_VOLUME_VALUE = 6
     self.MSGID_SET_MIDI_IN_CHANNEL = 7
+
     self.MSGID_CHANGE_SMF_FILE_NO = 101
     self.MSGID_SMF_PLAYER_CONTROL = 102
     self.MSGID_MIDI_FILE_OPERATION = 201
     self.MSGID_MIDI_FILE_LOAD_SAVE = 202
+
+    self.MSGID_SEQUENCER_CHANGE_FILE_OP = 301
+    self.MSGID_SEQUENCER_SELECT_FILE = 302
+
     self.MSGID_SWITCH_UPPER_LOWER = 997
     self.MSGID_SETUP_PLAYER_SCREEN = 998
     self.MSGID_APPLICATION_SCREEN_CHANGE = 999
@@ -249,11 +254,27 @@ class message_definitions():
     self.VIEW_MIDI_IN_PLAYER_SET_TEXT = 3002
     self.VIEW_MIDI_IN_PLAYER_SET_VISIBLE = 3003
     self.VIEW_MIDI_IN_PLAYER_SET_COLOR = 3004
-  
+    self.VIEW_MIDI_IN_PLAYER_SET_SET_TEXT = 3101
+    self.VIEW_MIDI_IN_PLAYER_SET_CTRL_SET_TEXT = 3012
+    self.VIEW_MIDI_IN_PLAYER_CHANNEL_SET_TEXT = 3103
+    self.VIEW_MIDI_IN_PLAYER_PROGRAM_SET_TEXT = 3104
+    self.VIEW_MIDI_IN_PLAYER_PARAMETER_SET_TEXT = 3105
+    self.VIEW_MIDI_IN_PLAYER_PARM_VALUE_SET_TEXT = 3106
+    self.VIEW_MIDI_IN_PLAYER_PARM_TITLE_SET_TEXT = 3107
+
     self.VIEW_SEQUENCER_SETUP = 4001
     self.VIEW_SEQUENCER_SET_TEXT = 4002
     self.VIEW_SEQUENCER_SET_VISIBLE = 4003
     self.VIEW_SEQUENCER_SET_COLOR = 4004
+    self.VIEW_SEQUENCER_TRACK1_SET_TEXT = 4101
+    self.VIEW_SEQUENCER_TRACK2_SET_TEXT = 4102
+    self.VIEW_SEQUENCER_KEY1_SET_TEXT = 4103
+    self.VIEW_SEQUENCER_KEY2_SET_TEXT = 4104
+    self.VIEW_SEQUENCER_FILE_SET_TEXT = 4105
+    self.VIEW_SEQUENCER_FILE_OP_SET_TEXT = 4106
+    self.VIEW_SEQUENCER_TIME_SET_TEXT = 4107
+    self.VIEW_SEQUENCER_MASTER_VOLUME_SET_TEXT = 4108
+    self.VIEW_SEQUENCER_PARM_NAME_SET_TEXT = 4109
 
 ################# End of Message ID Definition Class Definition #################
 
@@ -1324,6 +1345,26 @@ class sequencer_class(message_center_class):
     self.seq_parm_repeat = None
     self.seq_control = {'tempo': 120, 'mini_note': 4, 'time_per_bar': 4, 'disp_time': [0,12], 'disp_key': [[57,74],[57,74]], 'time_cursor': 0, 'key_cursor': [60,60], 'program':[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15], 'gmbank':[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}
 
+    # Message Center
+    if not message_center is None:
+      self.message_center = message_center
+#      self.message_center.add_contributor(self)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_CHANGE_FILE_OP, self.func_SEQUENCER_CHANGE_FILE_OP)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_SELECT_FILE, self.func_SEQUENCER_SELECT_FILE)
+
+    else:
+      self.message_center = self
+
+    # Sequencer file
+    self.SEQ_FILE_LOAD = 0
+    self.SEQ_FILE_SAVE = 1
+    self.SEQ_FILE_NOP  = 2
+
+    # Sequencer file
+    self.seq_file_number = 0                               # Sequencer file number
+    self.seq_file_ctrl = self.SEQ_FILE_NOP                 # Currnet MIDI IN setting file operation id
+    self.seq_file_ctrl_label = ['L', 'S', '-']             # Load / Save / nop
+
     # Sequencer parameter
     #   Sequencer parameter strings to show
     self.SEQUENCER_PARM_CHANNEL = 0                        # Change a track MIDI channel
@@ -1373,6 +1414,43 @@ class sequencer_class(message_center_class):
     else:
       self.message_center = self
 
+  # Message Receiver: Sequencer controls
+  def func_SEQUENCER_CHANGE_FILE_OP(self, message_data):
+    print('func_SEQUENCER_CHANGE_FILE_OP', message_data)
+    delta = message_data['delta']
+    self.seq_file_ctrl = (self.seq_file_ctrl + delta) % 3
+#          self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_file_op', 'value': self.seq_file_ctrl_label[self.seq_file_ctrl]})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_FILE_OP_SET_TEXT)
+
+    enc_button = message_data['do_operation']
+    if enc_button:
+      if self.seq_file_ctrl == self.SEQ_FILE_LOAD:
+        self.sequencer_load_file(self.set_sequencer_file_path(), self.seq_file_number)
+        self.enc_slide_switch = None
+        self.seq_file_ctrl = self.SEQ_FILE_NOP
+  #            self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_file_op', 'value': self.seq_file_ctrl_label[self.seq_file_ctrl]})
+        self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_FILE_OP_SET_TEXT)
+
+      elif self.seq_file_ctrl == self.SEQ_FILE_SAVE:
+        self.sequencer_save_file(self.set_sequencer_file_path(), self.seq_file_number)
+        self.seq_file_ctrl = self.SEQ_FILE_NOP
+  #            self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_file_op', 'value': self.seq_file_ctrl_label[self.seq_file_ctrl]})
+        self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_FILE_OP_SET_TEXT)
+
+  # Message Receiver: Sequencer controls
+  def func_SEQUENCER_SELECT_FILE(self, message_data):
+    print('func_SEQUENCER_SELECT_FILE', message_data)
+    delta = message_data['delta']
+    self.seq_file_number = (self.seq_file_number + delta) % self.SEQ_FILE_MAX
+#          self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_file', 'format': '{:03d}', 'value': self.seq_file_number})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_FILE_SET_TEXT)
+
+    enc_button = message_data['do_operation']
+    if enc_button:
+      self.send_all_sequencer_settings()
+      self.play_sequencer()
+      self.send_sequencer_current_channel_settings(self.get_track_midi())
+
   # Set up the sequencer
   def setup_sequencer(self):
     # Initialize the sequencer channels
@@ -1401,15 +1479,22 @@ class sequencer_class(message_center_class):
     self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'title_seq_master_volume', 'visible': False})
 
     # SEQUENCER data labels
-    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'title_seq_track1', 'format': '{:02d}', 'value': self.seq_track_midi[0]+1})
-    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_track2', 'format': '{:02d}', 'value': self.seq_track_midi[1]+1})
-    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_key1', 'value': self.seqencer_key_name(self.seq_control['key_cursor'][0])})
+#    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'title_seq_track1', 'format': '{:02d}', 'value': self.seq_track_midi[0]+1})
+#    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_track2', 'format': '{:02d}', 'value': self.seq_track_midi[1]+1})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_TRACK1_SET_TEXT)
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_TRACK2_SET_TEXT)
+#    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_key1', 'value': self.seqencer_key_name(self.seq_control['key_cursor'][0])})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_KEY1_SET_TEXT, None)
     self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_COLOR, {'label': 'label_seq_key1', 'fore': 0xff4040 if self.seq_edit_track == 0 else 0x00ccff, 'back': 0x222222})
-    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_key2', 'value': self.seqencer_key_name(self.seq_control['key_cursor'][1])})
+#    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_key2', 'value': self.seqencer_key_name(self.seq_control['key_cursor'][1])})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_KEY2_SET_TEXT, None)
     self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_COLOR, {'label': 'label_seq_key2', 'fore': 0xff4040 if self.seq_edit_track == 1 else 0x00ccff, 'back': 0x222222})
-    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_file', 'format': '{:03d}', 'value': device_8encoder.seq_file_number})
-    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_file_op', 'value': device_8encoder.seq_file_ctrl_label[device_8encoder.seq_file_ctrl]})
-    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_time', 'format': '{:03d}/{:03d}', 'value': (self.seq_control['time_cursor'], int(self.seq_control['time_cursor']/self.seq_control['time_per_bar']) + 1)})
+#    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_file', 'format': '{:03d}', 'value': device_8encoder.seq_file_number})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_FILE_SET_TEXT)
+#    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_file_op', 'value': device_8encoder.seq_file_ctrl_label[device_8encoder.seq_file_ctrl]})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_FILE_OP_SET_TEXT)
+#    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_time', 'format': '{:03d}/{:03d}', 'value': (self.seq_control['time_cursor'], int(self.seq_control['time_cursor']/self.seq_control['time_per_bar']) + 1)})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_TIME_SET_TEXT)
 
     self.message_center.phone_message(self, self.message_center.MSGID_SHOW_MASTER_VOLUME_VALUE, None)
 
@@ -1423,7 +1508,8 @@ class sequencer_class(message_center_class):
     prg = prg[:9]
     self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_program2', 'value': prg})
     
-    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_parm_name', 'value': self.seq_parameter_names[self.seq_parm]})
+#    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_parm_name', 'value': self.seq_parameter_names[self.seq_parm]})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_PARM_NAME_SET_TEXT)
     self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_parm_value', 'value': prg})
 
     self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_track1', 'visible': False})
@@ -1795,10 +1881,12 @@ class sequencer_class(message_center_class):
     prg = prg[:9]
 
     if   self.seq_edit_track == 0:
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_track1', 'format': '{:02d}', 'value': self.seq_track_midi[0]+1})
+#      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_track1', 'format': '{:02d}', 'value': self.seq_track_midi[0]+1})
+      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_TRACK1_SET_TEXT)
       self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_program1', 'value': prg})
     elif self.seq_edit_track == 1:
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_track2', 'format': '{:02d}', 'value': self.seq_track_midi[1]+1})
+#      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_track2', 'format': '{:02d}', 'value': self.seq_track_midi[1]+1})
+      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_TRACK2_SET_TEXT)
       self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_program2', 'value': prg})
 
   # Change time span to display score
@@ -2274,7 +2362,8 @@ class sequencer_class(message_center_class):
   # Show / erase sequencer cursor
   def seq_show_cursor(self, edit_track, disp_time, disp_key):
     # Draw time cursor
-    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_time', 'format': '{:03d}/{:03d}', 'value': (self.seq_control['time_cursor'],int(self.seq_control['time_cursor']/self.seq_control['time_per_bar']) + 1)})
+#    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_time', 'format': '{:03d}/{:03d}', 'value': (self.seq_control['time_cursor'],int(self.seq_control['time_cursor']/self.seq_control['time_per_bar']) + 1)})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_TIME_SET_TEXT)
     if self.seq_control['disp_time'][0] <= self.seq_control['time_cursor'] and self.seq_control['time_cursor'] <= self.seq_control['disp_time'][1]:
       for trknum in range(2):
         area = self.seq_draw_area[trknum]
@@ -2307,9 +2396,11 @@ class sequencer_class(message_center_class):
 
     # Show key name
     if edit_track == 0:
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_key1', 'value': self.seqencer_key_name(self.seq_control['key_cursor'][0])})
+#      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_key1', 'value': self.seqencer_key_name(self.seq_control['key_cursor'][0])})
+      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_KEY1_SET_TEXT, None)
     else:
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_key2', 'value': self.seqencer_key_name(self.seq_control['key_cursor'][1])})
+#      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_key2', 'value': self.seqencer_key_name(self.seq_control['key_cursor'][1])})
+      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_KEY2_SET_TEXT, None)
 
   # Draw a note on the sequencer
   def sequencer_draw_note(self, trknum, note_num, note_on_time, note_off_time, disp_mode):
@@ -2685,7 +2776,8 @@ class midi_in_player_class(message_center_class):
   def set_midi_in_program(self, dlt):
     self.midi_in_settings[self.midi_in_ch]['program'] = (self.midi_in_settings[self.midi_in_ch]['program'] + dlt) % 128
     midi_in_program = self.midi_in_settings[self.midi_in_ch]['program']
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_program', 'format': '{:0>3d}', 'value': midi_in_program})
+#    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_program', 'format': '{:0>3d}', 'value': midi_in_program})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PROGRAM_SET_TEXT, {'value': midi_in_program})
 
     prg = self.midi_obj.get_gm_program_name(self.midi_in_settings[self.midi_in_ch]['gmbank'], midi_in_program)
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_program_name', 'value': prg})
@@ -2975,6 +3067,14 @@ class view_midi_in_player_class(view_m5stack_core2):
       self.message_center.add_subscriber(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, self.label_setText)
       self.message_center.add_subscriber(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, self.label_setVisible)
       self.message_center.add_subscriber(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_COLOR, self.label_setColor)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_SET_TEXT, self.func_MIDI_IN_PLAYER_SET_SET_TEXT)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_CTRL_SET_TEXT, self.func_MIDI_IN_PLAYER_SET_CTRL_SET_TEXT)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_MIDI_IN_PLAYER_CHANNEL_SET_TEXT, self.func_MIDI_IN_PLAYER_CHANNEL_SET_TEXT)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_MIDI_IN_PLAYER_PROGRAM_SET_TEXT, self.func_MIDI_IN_PLAYER_PROGRAM_SET_TEXT)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARAMETER_SET_TEXT, self.func_MIDI_IN_PLAYER_PARAMETER_SET_TEXT)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARM_VALUE_SET_TEXT, self.func_MIDI_IN_PLAYER_PARM_VALUE_SET_TEXT)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARM_TITLE_SET_TEXT, self.func_MIDI_IN_PLAYER_PARM_TITLE_SET_TEXT)
+
     else:
       self.message_center = self
 
@@ -2993,6 +3093,59 @@ class view_midi_in_player_class(view_m5stack_core2):
     self.add_label('label_midi_parameter', 204, 140, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
     self.add_label('label_midi_parm_value', 264, 140, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
     self.add_label('label_midi_parm_title', 204, 100, 1.0, 0x00ccff, 0x222222, Widgets.FONTS.DejaVu18)
+
+  def func_MIDI_IN_PLAYER_SET_SET_TEXT(self, message_data = None):
+    if message_data is None:
+      message_data = {'value': self.data_obj.set_midi_in_set_num()}
+
+    message_data['label'] = 'label_midi_in_set'
+    message_data['format'] = '{:03d}'
+    return self.label_setText(message_data)
+
+  def func_MIDI_IN_PLAYER_SET_CTRL_SET_TEXT(self, message_data = None):
+    if message_data is None:
+      message_data = {'value': application.enc_midi_set_ctrl_list[application.enc_midi_set_ctrl]}
+
+    message_data['label'] = 'label_midi_in_set_ctrl'
+    return self.label_setText(message_data)
+
+  def func_MIDI_IN_PLAYER_CHANNEL_SET_TEXT(self, message_data = None):
+    if message_data is None:
+      message_data = {'value': 0}
+
+    message_data['label'] = 'label_channel'
+    message_data['format'] = '{:0>2d}'
+    return self.label_setText(message_data)
+
+  def func_MIDI_IN_PLAYER_PROGRAM_SET_TEXT(self, message_data):
+    if message_data is None:
+      message_data = {'value': 999}
+
+    message_data['label'] = 'label_program'
+    message_data['format'] = '{:0>3d}'
+    return self.label_setText(message_data)
+
+  def func_MIDI_IN_PLAYER_PARAMETER_SET_TEXT(self, message_data = None):
+    if message_data is None:
+      message_data = {'value': application.enc_parameter_info[application.enc_parm]['params'][0]['label']}
+
+    message_data['label'] = 'label_midi_parameter'
+    return self.label_setText(message_data)
+
+  def func_MIDI_IN_PLAYER_PARM_VALUE_SET_TEXT(self, message_data = None):
+    if message_data is None:
+      message_data = {'value': self.data_obj.midi_in_settings[self.data_obj.midi_in_ch]['reverb'][0]}
+
+    message_data['label'] = 'label_midi_parm_value'
+    message_data['format'] = '{:03d}'
+    return self.label_setText(message_data)
+
+  def func_MIDI_IN_PLAYER_PARM_TITLE_SET_TEXT(self, message_data = None):
+    if message_data is None:
+      message_data = {'value': application.enc_parameter_info[application.enc_parm]['title']}
+
+    message_data['label'] = 'label_midi_parm_title'
+    return self.label_setText(message_data)
 
 ################# End of view_midi_in_player_class Definition #################
 
@@ -3015,6 +3168,16 @@ class view_sequencer_class(view_m5stack_core2):
       self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, self.label_setText)
       self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, self.label_setVisible)
       self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_SET_COLOR, self.label_setColor)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_TRACK1_SET_TEXT, self.func_SEQUENCER_TRACK1_SET_TEXT)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_TRACK2_SET_TEXT, self.func_SEQUENCER_TRACK1_SET_TEXT)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_KEY1_SET_TEXT, self.func_SEQUENCER_KEY1_SET_TEXT)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_KEY2_SET_TEXT, self.func_SEQUENCER_KEY2_SET_TEXT)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_FILE_SET_TEXT, self.func_SEQUENCER_FILE_SET_TEXT)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_FILE_OP_SET_TEXT, self.func_SEQUENCER_FILE_OP_SET_TEXT)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_TIME_SET_TEXT, self.func_SEQUENCER_TIME_SET_TEXT)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_MASTER_VOLUME_SET_TEXT, self.func_SEQUENCER_MASTER_VOLUME_SET_TEXT)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_PARM_NAME_SET_TEXT, self.func_SEQUENCER_PARM_NAME_SET_TEXT)
+
     else:
       self.message_center = self
 
@@ -3039,6 +3202,74 @@ class view_sequencer_class(view_m5stack_core2):
     self.add_label('label_seq_parm_value', 280, 20, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
     self.add_label('label_seq_program1', 100, 20, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
     self.add_label('label_seq_program2', 100, 131, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+
+  def func_SEQUENCER_TRACK1_SET_TEXT(self, message_data = None):
+    if message_data is None:
+      message_data = {'value': self.data_obj.seq_track_midi[0]+1}
+
+    message_data['label'] = 'label_seq_track1'
+    message_data['format'] = '{:02d}'
+    return self.label_setText(message_data)
+
+  def func_SEQUENCER_TRACK2_SET_TEXT(self, message_data = None):
+    if message_data is None:
+      message_data = {'value': self.data_obj.seq_track_midi[1]+1}
+
+    message_data['label'] = 'label_seq_track2'
+    message_data['format'] = '{:02d}'
+    return self.label_setText(message_data)
+
+  def func_SEQUENCER_KEY1_SET_TEXT(self, message_data = None):
+    if message_data is None:
+      message_data = {'value': self.data_obj.seqencer_key_name(self.data_obj.seq_control['key_cursor'][0])}
+
+    message_data['label'] = 'label_seq_key1'
+    return self.label_setText(message_data)
+
+  def func_SEQUENCER_KEY2_SET_TEXT(self, message_data = None):
+    if message_data is None:
+      message_data = {'value': self.data_obj.seqencer_key_name(self.data_obj.seq_control['key_cursor'][1])}
+
+    message_data['label'] = 'label_seq_key2'
+    return self.label_setText(message_data)
+
+  def func_SEQUENCER_FILE_SET_TEXT(self, message_data = None):
+    if message_data is None:
+      message_data = {'value': self.data_obj.seq_file_number}
+
+    message_data['label'] = 'label_seq_file'
+    message_data['format'] = '{:03d}'
+    return self.label_setText(message_data)
+
+  def func_SEQUENCER_FILE_OP_SET_TEXT(self, message_data = None):
+    if message_data is None:
+      message_data = {'value': self.data_obj.seq_file_ctrl_label[self.data_obj.seq_file_ctrl]}
+
+    message_data['label'] = 'label_seq_file_op'
+    return self.label_setText(message_data)
+
+  def func_SEQUENCER_TIME_SET_TEXT(self, message_data = None):
+    if message_data is None:
+      message_data = {'value': (self.data_obj.seq_control['time_cursor'], int(self.data_obj.seq_control['time_cursor']/self.data_obj.seq_control['time_per_bar']) + 1)}
+
+    message_data['label'] = 'label_seq_time'
+    message_data['format'] = '{:03d}/{:03d}'
+    return self.label_setText(message_data)
+
+  def func_SEQUENCER_MASTER_VOLUME_SET_TEXT(self, message_data = None):
+    if message_data is None:
+      message_data = {'value': self.data_obj.midi_obj.get_master_volume()}
+
+    message_data['label'] = 'label_seq_master_volume'
+    message_data['format'] = '{:0>3d}'
+    return self.label_setText(message_data)
+
+  def func_SEQUENCER_PARM_NAME_SET_TEXT(self, message_data = None):
+    if message_data is None:
+      message_data = {'value': self.data_obj.seq_parameter_names[self.data_obj.seq_parm]}
+
+    message_data['label'] = 'label_seq_parm_name'
+    return self.label_setText(message_data)
 
 ################# End of view_sequencer_class Definition #################
 
@@ -3141,23 +3372,29 @@ class unit5c2_synth_application_class(message_center_class):
 #      label_master_volume.setText('{:0>3d}'.format(self.midi_obj.get_master_volume()))
       self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_TEXT, {'label': 'label_master_volume', 'format': '{:0>3d}', 'value': self.midi_obj.get_master_volume()})
     elif self.app_screen_mode == self.SCREEN_MODE_SEQUENCER:
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_master_volume', 'format': '{:0>3d}', 'value': self.midi_obj.get_master_volume()})
+#      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_master_volume', 'format': '{:0>3d}', 'value': self.midi_obj.get_master_volume()})
+      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_MASTER_VOLUME_SET_TEXT)
 
   def func_SET_MIDI_IN_CHANNEL(self, message_data):
     channel = midi_in_player_obj.set_midi_in_channel(message_data['delta'])
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_channel', 'format': '{:0>2d}', 'value': channel + 1})
+#    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_channel', 'format': '{:0>2d}', 'value': channel + 1})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_CHANNEL_SET_TEXT, {'value': channel + 1})
 
     # Reset the parameter to edit
     self.enc_parm = self.EFFECTOR_PARM_INIT
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parm_title', 'value': self.enc_parameter_info[self.enc_parm]['title']})
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parameter', 'value': self.enc_parameter_info[self.enc_parm]['params'][0]['label']})
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parm_value', 'format': '{:03d}', 'value': midi_in_player_obj.midi_in_settings[midi_in_player_obj.midi_in_ch]['reverb'][0]})
+#    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parm_title', 'value': self.enc_parameter_info[self.enc_parm]['title']})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARM_TITLE_SET_TEXT)
+#    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parameter', 'value': self.enc_parameter_info[self.enc_parm]['params'][0]['label']})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARAMETER_SET_TEXT)
+#    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parm_value', 'format': '{:03d}', 'value': midi_in_player_obj.midi_in_settings[midi_in_player_obj.midi_in_ch]['reverb'][0]})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARM_VALUE_SET_TEXT)
 
   def func_MIDI_FILE_OPERATION(self, message_data):
     delta = message_data['delta']
     if delta != 0:
       self.enc_midi_set_ctrl = (self.enc_midi_set_ctrl + delta) % 3
-      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in_set_ctrl', 'value': self.enc_midi_set_ctrl_list[self.enc_midi_set_ctrl]})
+#      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in_set_ctrl', 'value': self.enc_midi_set_ctrl_list[self.enc_midi_set_ctrl]})
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_CTRL_SET_TEXT, None)
 
   def func_MIDI_FILE_LOAD_SAVE(self, message_data):
     # Load a MIDI settings file
@@ -3176,7 +3413,8 @@ class unit5c2_synth_application_class(message_center_class):
         print('MIDI IN SET: NO FILE')
 
       self.enc_midi_set_ctrl = self.MIDI_SET_FILE_NOP
-      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in_set_ctrl', 'value': self.enc_midi_set_ctrl_list[self.enc_midi_set_ctrl]})
+#      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in_set_ctrl', 'value': self.enc_midi_set_ctrl_list[self.enc_midi_set_ctrl]})
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_CTRL_SET_TEXT, None)
 
     # Save MIDI settings file
     elif self.enc_midi_set_ctrl == self.MIDI_SET_FILE_SAVE:
@@ -3184,7 +3422,8 @@ class unit5c2_synth_application_class(message_center_class):
       print('SAVE MIDI IN SET:', self.midi_in_player_obj.set_midi_in_set_num(), self.midi_in_player_obj.get_midi_in_setting())
 
       self.enc_midi_set_ctrl = self.MIDI_SET_FILE_NOP
-      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in_set_ctrl', 'value': self.enc_midi_set_ctrl_list[self.enc_midi_set_ctrl]})
+#      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in_set_ctrl', 'value': self.enc_midi_set_ctrl_list[self.enc_midi_set_ctrl]})
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_CTRL_SET_TEXT, None)
 
   def func_SWITCH_UPPER_LOWER(self, message_data):
     # Player screen
@@ -3294,13 +3533,17 @@ class unit5c2_synth_application_class(message_center_class):
     # GUI for MIDI-IN Player draw
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'title_midi_in', 'value': 'MIDI-IN PLAYER'})
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'title_midi_in_params', 'value': 'NO. FIL  MCH PROG PARM VAL'})
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in_set', 'format': '{:03d}', 'value': midi_in_player_obj.set_midi_in_set_num()})
+#    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in_set', 'format': '{:03d}', 'value': midi_in_player_obj.set_midi_in_set_num()})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_SET_TEXT)
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in_set_ctrl', 'value': self.enc_midi_set_ctrl_list[self.enc_midi_set_ctrl]})
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parm_title', 'value': self.enc_parameter_info[self.enc_parm]['title']})
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parameter', 'value': self.enc_parameter_info[self.enc_parm]['params'][0]['label']})
+#    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parm_title', 'value': self.enc_parameter_info[self.enc_parm]['title']})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARM_TITLE_SET_TEXT)
+#    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parameter', 'value': self.enc_parameter_info[self.enc_parm]['params'][0]['label']})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARAMETER_SET_TEXT)
 
     midi_in_settings = midi_in_player_obj.get_midi_in_setting()
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parm_value', 'format': '{:03d}', 'value': midi_in_settings[midi_in_player_obj.midi_in_channel()]['reverb'][0]})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARM_VALUE_SET_TEXT)
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_COLOR, {'label': 'label_midi_parameter', 'fore': 0x00ffcc, 'back': 0x222222})
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_COLOR, {'label': 'label_midi_parm_value', 'fore': 0xffffff, 'back': 0x222222})
 
@@ -3485,16 +3728,6 @@ class device_8encoder_class(message_center_class):
     self.ENC_SEQ_CTRL2       = 106   # Set effector parameter values
     self.ENC_SEQ_SCREEN2     = 107   # not available
     self.ENC_SEQ_MASTER_VOL2 = 108   # Change master volume
-
-    # Sequencer file
-    self.SEQ_FILE_LOAD = 0
-    self.SEQ_FILE_SAVE = 1
-    self.SEQ_FILE_NOP  = 2
-
-    # Sequencer file
-    self.seq_file_number = 0                       # Sequencer file number
-    self.seq_file_ctrl = self.SEQ_FILE_NOP              # Currnet MIDI IN setting file operation id
-    self.seq_file_ctrl_label = ['L', 'S', '-']
 
     # Change parameter value by decade or 1 (decade: True, 1: False)
     self.enc_parm_decade = False                     # Change effector parameter values
@@ -3825,7 +4058,8 @@ class device_8encoder_class(message_center_class):
         # File number
         if delta != 0:
           num = midi_in_player_obj.set_midi_in_set_num(midi_in_player_obj.set_midi_in_set_num() + delta * (10 if self.enc_midi_set_decade else 1))
-          self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in_set', 'format': '{:03d}','value': num})
+#          self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in_set', 'format': '{:03d}','value': num})
+          self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_SET_TEXT, {'value': num})
 
       # File operation (read/write)
       elif enc_menu == self.ENC_MIDI_FILE:
@@ -3880,9 +4114,12 @@ class device_8encoder_class(message_center_class):
             disp = 999
 
           # Display the parameter
-          self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parm_title', 'value': pttl})
-          self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parameter', 'value': plbl})
-          self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parm_value', 'format': '{:03d}', 'value': disp})
+#          self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parm_title', 'value': pttl})
+          self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARM_TITLE_SET_TEXT, {'value': pttl})
+#          self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parameter', 'value': plbl})
+          self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARAMETER_SET_TEXT, {'value': plbl})
+#          self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parm_value', 'format': '{:03d}', 'value': disp})
+          self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARM_VALUE_SET_TEXT, {'value': disp})
 
       # Set parameter value
       elif enc_menu == self.ENC_MIDI_CTRL:
@@ -3906,7 +4143,8 @@ class device_8encoder_class(message_center_class):
             disp = 999
 
           # Display the label
-          self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parm_value', 'format': '{:03d}', 'value': disp})
+#          self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parm_value', 'format': '{:03d}', 'value': disp})
+          self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARM_VALUE_SET_TEXT, {'value': disp})
 
       # Change master volume
       elif enc_menu == self.ENC_SMF_MASTER_VOL or enc_menu == self.ENC_MIDI_MASTER_VOL or enc_menu == self.ENC_SEQ_MASTER_VOL1 or enc_menu == self.ENC_SEQ_MASTER_VOL2:
@@ -3940,32 +4178,13 @@ class device_8encoder_class(message_center_class):
 
       # Select file / Play or Stop
       elif  enc_menu == self.ENC_SEQ_SET1 or enc_menu == self.ENC_SEQ_SET2:
-        if delta != 0:
-          self.seq_file_number = (self.seq_file_number + delta) % sequencer_obj.SEQ_FILE_MAX
-          self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_file', 'format': '{:03d}', 'value': self.seq_file_number})
-
-        if enc_button:
-          sequencer_obj.send_all_sequencer_settings()
-          sequencer_obj.play_sequencer()
-          sequencer_obj.send_sequencer_current_channel_settings(sequencer_obj.get_track_midi())
+        if delta != 0 or enc_button:
+          self.message_center.phone_message(self, self.message_center.MSGID_SEQUENCER_SELECT_FILE, {'delta': delta, 'do_operation': enc_button})
 
       # File operation
       elif  enc_menu == self.ENC_SEQ_FILE1 or enc_menu == self.ENC_SEQ_FILE2:
-        if delta != 0:
-          self.seq_file_ctrl = (self.seq_file_ctrl + delta) % 3
-          self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_file_op', 'value': self.seq_file_ctrl_label[self.seq_file_ctrl]})
-
-        if enc_button:
-          if self.seq_file_ctrl == self.SEQ_FILE_LOAD:
-            sequencer_obj.sequencer_load_file(sequencer_obj.set_sequencer_file_path(), self.seq_file_number)
-            self.enc_slide_switch = None
-            self.seq_file_ctrl = self.SEQ_FILE_NOP
-            self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_file_op', 'value': self.seq_file_ctrl_label[self.seq_file_ctrl]})
-
-          elif self.seq_file_ctrl == self.SEQ_FILE_SAVE:
-            sequencer_obj.sequencer_save_file(sequencer_obj.set_sequencer_file_path(), self.seq_file_number)
-            self.seq_file_ctrl = self.SEQ_FILE_NOP
-            self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_file_op', 'value': self.seq_file_ctrl_label[self.seq_file_ctrl]})
+        if delta != 0 or enc_button:
+          self.message_center.phone_message(self, self.message_center.MSGID_SEQUENCER_CHANGE_FILE_OP, {'delta': delta, 'do_operation': enc_button})
 
       # Move sequencer cursor
       elif enc_menu == self.ENC_SEQ_CURSOR1 or enc_menu == self.ENC_SEQ_CURSOR2:
@@ -4089,7 +4308,8 @@ class device_8encoder_class(message_center_class):
       # Select sequencer parameter to edit
       elif enc_menu == self.ENC_SEQ_PARAMETER1 or enc_menu == self.ENC_SEQ_PARAMETER2:
         if delta != 0 or slide_switch_change:
-          self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_parm_name', 'value': sequencer_obj.seq_parameter_names[sequencer_obj.seq_parm]})
+#          self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_parm_name', 'value': sequencer_obj.seq_parameter_names[sequencer_obj.seq_parm]})
+          self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_PARM_NAME_SET_TEXT)
 
           # Show parameter value
           if   sequencer_obj.seq_parm == sequencer_obj.SEQUENCER_PARM_TIMESPAN:
