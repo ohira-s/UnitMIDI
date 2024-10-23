@@ -4427,7 +4427,7 @@ class unit5c2_synth_application_class(message_center_class):
       self.enc_total_parameters = self.enc_total_parameters + len(effector['params'])
 
     midi_in_settings = self.midi_in_player_obj.get_midi_in_setting()
-    self.message_center.phone_message(self, self.message_center.MSGID_MIDI_SET_INSTRUMENT, {'gm_bank': midi_in_settings[midi_in_player_obj.midi_in_channel()]['gmbank'], 'channel': self.midi_in_player_obj.midi_in_channel(), 'program_number': midi_in_settings[midi_in_player_obj.midi_in_channel()]['program']})
+    self.message_center.phone_message(self, self.message_center.MSGID_MIDI_SET_INSTRUMENT, {'gm_bank': midi_in_settings[self.midi_in_player_obj.midi_in_channel()]['gmbank'], 'channel': self.midi_in_player_obj.midi_in_channel(), 'program_number': midi_in_settings[self.midi_in_player_obj.midi_in_channel()]['program']})
     for ch in range(16):
       self.midi_obj.set_reverb(ch, 0, 0, 0)
       self.midi_obj.set_chorus(ch, 0, 0, 0, 0)
@@ -4467,7 +4467,7 @@ class unit5c2_synth_application_class(message_center_class):
     self.message_center.phone_message(self, self.message_center.MSGID_MSGID_MIDI_ALL_NOTES_OFF)
 
     # Load default MIDI IN settings
-    midi_in_set = self.midi_in_player_obj.read_midi_in_settings(midi_in_player_obj.set_midi_in_set_num())
+    midi_in_set = self.midi_in_player_obj.read_midi_in_settings(self.midi_in_player_obj.set_midi_in_set_num())
     if not midi_in_set is None:
       print('LOAD MIDI IN SET:', self.midi_in_player_obj.set_midi_in_set_num())
       self.midi_in_player_obj.set_midi_in_setting(midi_in_set)
@@ -4490,7 +4490,7 @@ class unit5c2_synth_application_class(message_center_class):
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARAMETER_SET_TEXT)
 
     midi_in_settings = self.midi_in_player_obj.get_midi_in_setting()
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parm_value', 'format': '{:03d}', 'value': midi_in_settings[midi_in_player_obj.midi_in_channel()]['reverb'][0]})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parm_value', 'format': '{:03d}', 'value': midi_in_settings[self.midi_in_player_obj.midi_in_channel()]['reverb'][0]})
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARM_VALUE_SET_TEXT)
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_COLOR, {'label': 'label_midi_parameter', 'fore': 0x00ffcc, 'back': 0x222222})
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_COLOR, {'label': 'label_midi_parm_value', 'fore': 0xffffff, 'back': 0x222222})
