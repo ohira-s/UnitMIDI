@@ -655,9 +655,10 @@ class sdcard_class:
 ################
 class midi_class:
   # Constructor
-  def __init__(self, synthesizer_obj):
+  def __init__(self, synthesizer_obj, sdcard_obj):
     self.shynth = synthesizer_obj
     self.midi_uart = self.shynth._uart
+    self.sdcard_obj = sdcard_obj
     self.master_volume = 127
     self.key_trans = 0
     self.key_names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']
@@ -696,18 +697,18 @@ class midi_class:
   #   gmbank: GM bank number
   #   program: GM program number
   def get_gm_program_name(self, gmbank, program):
-    f = sdcard_obj.file_open(self.GM_FILE_PATH, 'GM' + str(gmbank) + '.TXT')
+    f = self.sdcard_obj.file_open(self.GM_FILE_PATH, 'GM' + str(gmbank) + '.TXT')
     if not f is None:
       for mf in f:
         mf = mf.strip()
         if len(mf) > 0:
           if program == 0:
-            sdcard_obj.file_close()
+            self.sdcard_obj.file_close()
             return mf
 
         program = program - 1
 
-      sdcard_obj.file_close()
+      self.sdcard_obj.file_close()
 
     return 'UNKNOWN'
 
@@ -800,8 +801,8 @@ class midi_class:
 ################################
 class midi_message_class(midi_class):
   # Constructor
-  def __init__(self, synthesizer_obj, message_center = None):
-    super().__init__(synthesizer_obj)
+  def __init__(self, synthesizer_obj, sdcard_obj, message_center = None):
+    super().__init__(synthesizer_obj, sdcard_obj)
 
     # Message Center
     if not message_center is None:
@@ -863,8 +864,9 @@ class midi_message_class(midi_class):
 ###################################
 class smf_player_class():
   # Constructor
-  def __init__(self, midi_obj):
+  def __init__(self, midi_obj, sdcard_obj):
     self.midi_obj = midi_obj
+    self.sdcard_obj = sdcard_obj
 
     self.smf_files = []               # Standar MIDI file names list
     self.smf_file_selected = -1       # SMF index in smf_files to read
@@ -880,7 +882,7 @@ class smf_player_class():
 
   # Make the standard midi files catalog
   def standard_midi_file_catalog(self):
-    f = sdcard_obj.file_open(self.SMF_FILE_PATH, self.SMF_LIST_FILE)
+    f = self.sdcard_obj.file_open(self.SMF_FILE_PATH, self.SMF_LIST_FILE)
     if not f is None:
       for mf in f:
         mf = mf.strip()
@@ -889,7 +891,7 @@ class smf_player_class():
           if len(cat) == 3:
             self.smf_files.append(cat)
 
-      sdcard_obj.file_close()
+      self.sdcard_obj.file_close()
 
     if len(self.smf_files) > 0:
       self.smf_file_selected = 0
@@ -1422,8 +1424,8 @@ class smf_player_class():
 ######################################
 class smf_player_message_class(smf_player_class):
   # Constructor
-  def __init__(self, midi_obj, message_center = None):
-    super().__init__(midi_obj)
+  def __init__(self, midi_obj, sdcard_obj, message_center = None):
+    super().__init__(midi_obj, sdcard_obj)
 
     # Message Center
     if not message_center is None:
@@ -1585,8 +1587,9 @@ class sequencer_class():
   # self.seq_parm_repeat: Current time cursor position or None
 
   # Constructor
-  def __init__(self, midi_obj):
+  def __init__(self, midi_obj, sdcard_obj):
     self.midi_obj = midi_obj
+    self.sdcard_obj = sdcard_obj
     self.seq_channel = None
     self.seq_score = None
     self.seq_score_sign = None
@@ -1851,13 +1854,13 @@ class sequencer_class():
   # Save sequencer file
   def sequencer_save_file(self, path, num):
     # Write MIDI IN settings as JSON file
-    if sdcard_obj.json_write(path, 'SEQSC{:0=3d}.json'.format(num), {'channel': self.seq_channel, 'control': self.seq_control, 'score': self.seq_score, 'sign': self.seq_score_sign}):
+    if self.sdcard_obj.json_write(path, 'SEQSC{:0=3d}.json'.format(num), {'channel': self.seq_channel, 'control': self.seq_control, 'score': self.seq_score, 'sign': self.seq_score_sign}):
       print('SAVED')
 
   # Load sequencer file
   def sequencer_load_file(self, path, num):
     # Read MIDI IN settings JSON file
-    seq_data = sdcard_obj.json_read(path, 'SEQSC{:0=3d}.json'.format(num))
+    seq_data = self.sdcard_obj.json_read(path, 'SEQSC{:0=3d}.json'.format(num))
     if not seq_data is None:
       if 'score' in seq_data.keys():
         if seq_data['score'] is None:
@@ -2544,8 +2547,8 @@ class sequencer_class():
 ###########################
 class sequencer_message_class(sequencer_class):
   # Constructor
-  def __init__(self, midi_obj, message_center = None):
-    super().__init__(midi_obj)
+  def __init__(self, midi_obj, sdcard_obj, message_center = None):
+    super().__init__(midi_obj, sdcard_obj)
 
     # Message Center
     if not message_center is None:
@@ -5364,8 +5367,8 @@ if __name__ == '__main__':
     device_8encoder = device_8encoder_class(device_manager, message_center)
 
     # Synthesizer object
-    midi_obj = midi_class(MIDIUnit(1, port=(13, 14)))
-    midi_obj = midi_message_class(MIDIUnit(1, port=(13, 14)), message_center)
+#    midi_obj = midi_class(MIDIUnit(1, port=(13, 14)), sdcard_obj)
+    midi_obj = midi_message_class(MIDIUnit(1, port=(13, 14)), sdcard_obj, message_center)
     midi_obj.setup()
 
     # MIDI-IN Player object
@@ -5373,11 +5376,11 @@ if __name__ == '__main__':
     view_midi_in_player = view_midi_in_player_class(midi_in_player_obj, message_center)
 
     # Standard MIDI Player object
-    smf_player_obj = smf_player_message_class(midi_obj, message_center)
+    smf_player_obj = smf_player_message_class(midi_obj, sdcard_obj, message_center)
     view_smf_player = view_smf_player_class(smf_player_obj, message_center)
 
     # Sequencer object
-    sequencer_obj = sequencer_message_class(midi_obj, message_center)
+    sequencer_obj = sequencer_message_class(midi_obj, sdcard_obj, message_center)
     view_sequencer = view_sequencer_class(sequencer_obj, message_center)
     sequencer_obj.delegate_graphics(view_sequencer)
     sequencer_obj.setup_sequencer()
