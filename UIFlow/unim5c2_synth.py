@@ -213,21 +213,24 @@ import _thread
 class message_definitions():
   def __init__(self):
     self.MSGID_NONE = 0
-    self.VIEW_SMF_PLAYER_ACTIVATED = 1
-    self.VIEW_SMF_PLAYER_INACTIVATED = 2
-    self.VIEW_MIDI_IN_PLAYER_ACTIVATED = 3
-    self.VIEW_MIDI_IN_PLAYER_INACTIVATED = 4
-    self.VIEW_SEQUENCER_ACTIVATED = 5
-    self.MSGID_SHOW_MASTER_VOLUME_VALUE = 6
-    self.MSGID_SET_MIDI_IN_CHANNEL = 7
-    self.MSGID_MSGID_MIDI_ALL_NOTES_OFF = 8
-    self.MSGID_MIDI_GET_PROGRAM_NAME = 9
-    self.MSGID_MIDI_SET_INSTRUMENT = 10
-    self.MSGID_MIDI_SEND_PITCH_BEND = 11
+    self.MSGID_APPLICATION_SHOW_MASTER_VOLUME_VALUE = 1
+    self.MSGID_APPLICATION_SET_MIDI_IN_CHANNEL = 2
+    self.MSGID_APPLICATION_MIDI_FILE_OPERATION = 3
+    self.MSGID_APPLICATION_MIDI_FILE_LOAD_SAVE = 4
+    self.MSGID_APPLICATION_PLAYER_CONTROL = 5
+    self.MSGID_APPLICATION_SWITCH_UPPER_LOWER = 6
+    self.MSGID_APPLICATION_SETUP_PLAYER_SCREEN = 7
+    self.MSGID_APPLICATION_SCREEN_CHANGE = 8
+    self.MSGID_APPLICATION_FLUSH_MIDI_IN_SIGN = 9
 
-    self.MSGID_CHANGE_SMF_FILE_NO = 101
-    self.MSGID_MIDI_FILE_OPERATION = 102
-    self.MSGID_MIDI_FILE_LOAD_SAVE = 103
+    self.MSGID_MIDI_ALL_NOTES_OFF = 101
+    self.MSGID_MIDI_GET_PROGRAM_NAME = 102
+    self.MSGID_MIDI_SET_INSTRUMENT = 103
+    self.MSGID_MIDI_SET_GET_MASTER_VOLUME = 104
+    self.MSGID_MIDI_SET_REVERB = 105
+    self.MSGID_MIDI_SET_CHORUS = 106
+    self.MSGID_MIDI_SET_VIBRATE = 107
+    self.MSGID_MIDI_SEND_PITCH_BEND = 108
 
     self.MSGID_SMF_PLAYER_MAKE_SMF_CATALOG = 201
     self.MSGID_SMF_PLAYER_CONTROL = 202
@@ -241,8 +244,9 @@ class message_definitions():
     self.MSGID_SMF_PLAYER_SET_REVERB = 210
     self.MSGID_SMF_PLAYER_SET_CHORUS = 211
     self.MSGID_SMF_PLAYER_SET_VIBRATE = 212
+    self.MSGID_SMF_PLAYER_CHANGE_SMF_FILE_NO = 213
 
-    self.MSGID_MIDI_IN_PLAYER_SET_PROGRAM = 301
+    self.MSGID_MIDI_IN_PLAYER_SET_PROGRAM_DELTA = 301
     self.MSGID_MIDI_IN_PLAYER_SEND_ALL_MIDI_SETTINGS = 302
     self.MSGID_MIDI_IN_PLAYER_SET_REVERB = 303
     self.MSGID_MIDI_IN_PLAYER_SET_CHORUS = 304
@@ -252,6 +256,10 @@ class message_definitions():
     self.MSGID_MIDI_IN_PLAYER_GET_MIDI_IN_SETTING = 308
     self.MSGID_MIDI_IN_PLAYER_MASTER_VOLUME_DELTA = 309
     self.MSGID_MIDI_IN_PLAYER_SET_SETTING4PARAMS = 310
+    self.MSGID_MIDI_IN_PLAYER_SET_CHANNEL_DELTA = 311
+    self.MSGID_MIDI_IN_PLAYER_LOAD_SET_FILE = 312
+    self.MSGID_MIDI_IN_PLAYER_SAVE_SET_FILE = 313
+    self.MSGID_MIDI_IN_PLAYER_SET_DEFAULT = 314
 
     self.MSGID_SEQUENCER_SETUP = 401
     self.MSGID_SEQUENCER_CHANGE_FILE_OP = 402
@@ -309,15 +317,8 @@ class message_definitions():
     self.MSGID_SEQUENCER_SET_REPEAT_SIGNS = 454
     self.MSGID_SEQUENCER_GET_SIGNS_CURSOR = 455
     self.MSGID_SEQUENCER_CHANGE_REPEAT_SIGNS = 456
-
-    self.MSGID_APPLICATION_PLAYER_CONTROL = 901
-    self.MSGID_SWITCH_UPPER_LOWER = 997
-    self.MSGID_SETUP_PLAYER_SCREEN = 998
-    self.MSGID_APPLICATION_SCREEN_CHANGE = 999
-
-    self.MSGID_PHONE_SEQ_TURN_OFF_PLAY_BUTTON = 1001
-    self.MSGID_PHONE_SEQ_GET_PAUSE_STOP_BUTTON = 1002
-    self.MSGID_PHONE_SEQ_STOP_BUTTON = 1003
+    self.MSGID_SEQUENCER_SET_GET_EDIT_TRACK = 457
+    self.VIEW_DISPLAY_CLEAR = 499
 
     self.VIEW_SMF_PLAYER_SETUP = 2001
     self.VIEW_SMF_PLAYER_SET_TEXT = 2002
@@ -332,6 +333,9 @@ class message_definitions():
     self.VIEW_SMF_PLAYER_PARM_VALUE_SET_TEXT = 2107
     self.VIEW_SMF_PLAYER_PARM_TITLE_SET_TEXT = 2108
     self.VIEW_SMF_PLAYER_MASTER_VOLUME_SET_TEXT = 2109
+    self.VIEW_SMF_PLAYER_SCREEN_VISIBILITY = 2110
+    self.VIEW_SMF_PLAYER_ACTIVATED = 2111
+    self.VIEW_SMF_PLAYER_INACTIVATED = 2112
 
     self.VIEW_MIDI_IN_PLAYER_SETUP = 3001
     self.VIEW_MIDI_IN_PLAYER_SET_TEXT = 3002
@@ -344,6 +348,10 @@ class message_definitions():
     self.VIEW_MIDI_IN_PLAYER_PARAMETER_SET_TEXT = 3105
     self.VIEW_MIDI_IN_PLAYER_PARM_VALUE_SET_TEXT = 3106
     self.VIEW_MIDI_IN_PLAYER_PARM_TITLE_SET_TEXT = 3107
+    self.VIEW_MIDI_IN_PLAYER_INITIAL_DISPLAY = 3108
+    self.VIEW_MIDI_IN_PLAYER_SCREEN_VISIBILITY = 3109
+    self.VIEW_MIDI_IN_PLAYER_ACTIVATED = 3110
+    self.VIEW_MIDI_IN_PLAYER_INACTIVATED = 3111
 
     self.VIEW_SEQUENCER_SETUP = 4001
     self.VIEW_SEQUENCER_SET_TEXT = 4002
@@ -371,6 +379,12 @@ class message_definitions():
     self.VIEW_SEQUENCER_PROGRAM_NAME_SET_TEXT = 4120
     self.VIEW_SEQUENCER_VOLUME_RATIO_SET_TEXT = 4121
     self.VIEW_SEQUENCER_DRAW_KEYBOARD = 4122
+    self.VIEW_SEQUENCER_SCREEN_VISIBILITY = 4123
+    self.VIEW_SEQUENCER_ACTIVATED = 4124
+
+    self.MSGID_DEVICE_PHONE_SEQ_TURN_OFF_PLAY_BUTTON = 10001
+    self.MSGID_DEVICE_PHONE_SEQ_GET_PAUSE_STOP_BUTTON = 10002
+    self.MSGID_DEVICE_PHONE_SEQ_STOP_BUTTON = 10003
 
 ################# End of Message ID Definition Class Definition #################
 
@@ -808,9 +822,13 @@ class midi_message_class(midi_class):
     if not message_center is None:
       self.message_center = message_center
       self.message_center.add_contributor(self)
-      self.message_center.add_subscriber(self, self.message_center.MSGID_MSGID_MIDI_ALL_NOTES_OFF, self.func_MSGID_MIDI_ALL_NOTES_OFF)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_ALL_NOTES_OFF, self.func_MIDI_ALL_NOTES_OFF)
       self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_GET_PROGRAM_NAME, self.func_MIDI_GET_PROGRAM_NAME)
       self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_SET_INSTRUMENT, self.func_MIDI_SET_INSTRUMENT)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_SET_GET_MASTER_VOLUME, self.func_MIDI_SET_GET_MASTER_VOLUME)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_SET_REVERB, self.func_MIDI_SET_REVERB)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_SET_CHORUS, self.func_MIDI_SET_CHORUS)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_SET_VIBRATE, self.func_MIDI_SET_VIBRATE)
       self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_SEND_PITCH_BEND, self.func_MIDI_SEND_PITCH_BEND)
 
     else:
@@ -822,13 +840,101 @@ class midi_message_class(midi_class):
   def func_MIDI_SET_INSTRUMENT(self, message_data = None):
     self.set_instrument(message_data['gm_bank'], message_data['channel'], message_data['program_number'])
 
-  def func_MSGID_MIDI_ALL_NOTES_OFF(self, message_data = None):
+  def func_MIDI_ALL_NOTES_OFF(self, message_data = None):
     if message_data is None:
       self.set_all_notes_off()
     elif 'channel' in message_data.keys():
       self.set_all_notes_off(message_data['channel'])
     else:
       self.set_all_notes_off()
+
+  def func_MIDI_SET_GET_MASTER_VOLUME(self, message_data = None):
+    if message_data is None:
+      return self.get_master_volume()
+
+    if 'value' in message_data.keys():
+      self.set_master_volume(message_data['value'])
+
+    return self.get_master_volume()
+
+  def func_MIDI_SET_REVERB(self, message_data = None):
+    if not message_data is None:
+      if 'channel' in message_data.keys():
+        channel = message_data['channel']
+      else:
+        return
+      
+      if 'program' in message_data.keys():
+        prog = message_data['program']
+      else:
+        prog = 0
+      
+      if 'level' in message_data.keys():
+        level = message_data['level']
+      else:
+        level = 0
+      
+      if 'feedback' in message_data.keys():
+        feedback = message_data['feedback']
+      else:
+        feedback = 0
+
+      self.set_reverb(channel, prog, level, feedback)
+
+  # Chorus
+  def func_MIDI_SET_CHORUS(self, message_data = None):
+    if not message_data is None:
+      if 'channel' in message_data.keys():
+        channel = message_data['channel']
+      else:
+        return
+      
+      if 'program' in message_data.keys():
+        prog = message_data['program']
+      else:
+        prog = 0
+      
+      if 'level' in message_data.keys():
+        level = message_data['level']
+      else:
+        level = 0
+      
+      if 'feedback' in message_data.keys():
+        feedback = message_data['feedback']
+      else:
+        feedback = 0
+      
+      if 'delay' in message_data.keys():
+        delay = message_data['delay']
+      else:
+        delay = 0
+
+      self.set_chorus(channel, prog, level, feedback, delay)
+
+  # Vibrate
+  def func_MIDI_SET_VIBRATE(self, message_data = None):
+    if not message_data is None:
+      if 'channel' in message_data.keys():
+        channel = message_data['channel']
+      else:
+        return
+      
+      if 'rate' in message_data.keys():
+        rate = message_data['rate']
+      else:
+        rate = 0
+      
+      if 'depth' in message_data.keys():
+        depth = message_data['depth']
+      else:
+        depth = 0
+      
+      if 'delay' in message_data.keys():
+        delay = message_data['delay']
+      else:
+        delay = 0
+
+    self.set_vibrate(channel, rate, depth, delay)
 
   def func_MIDI_SEND_PITCH_BEND(self, message_data = None):
     if not message_data is None:
@@ -838,8 +944,10 @@ class midi_message_class(midi_class):
           value = -8192
         elif value > 8191:
           value = 8191
+      else:
+        return
 
-      if 'channel' in message_data.keys():
+      if not 'channel' in message_data.keys():
         channel = 0
       else:
         channel = message_data['channel']
@@ -1410,7 +1518,7 @@ class smf_player_class():
     except Exception as e:
       print('FILE ERROR:', e)
     finally:
-      self.message_center.phone_message(self, self.message_center.MSGID_MSGID_MIDI_ALL_NOTES_OFF)
+      self.message_center.phone_message(self, self.message_center.MSGID_MIDI_ALL_NOTES_OFF)
 
     self.set_playing_smf(False)
     self.set_smf_play_mode('STOP')
@@ -1433,7 +1541,7 @@ class smf_player_message_class(smf_player_class):
       self.message_center.add_contributor(self)
       self.message_center.add_subscriber(self, self.message_center.MSGID_SMF_PLAYER_MAKE_SMF_CATALOG, self.func_SMF_PLAYER_MAKE_SMF_CATALOG)
       self.message_center.add_subscriber(self, self.message_center.MSGID_SMF_PLAYER_CONTROL, self.func_SMF_PLAYER_CONTROL)
-      self.message_center.add_subscriber(self, self.message_center.MSGID_CHANGE_SMF_FILE_NO, self.func_CHANGE_SMF_FILE_NO)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_SMF_PLAYER_CHANGE_SMF_FILE_NO, self.func_SMF_PLAYER_CHANGE_SMF_FILE_NO)
       self.message_center.add_subscriber(self, self.message_center.MSGID_SMF_PLAYER_CHANGE_TRANSPOSE, self.func_SMF_PLAYER_CHANGE_TRANSPOSE)
       self.message_center.add_subscriber(self, self.message_center.MSGID_SMF_PLAYER_CHANGE_VOLUME, self.func_SMF_PLAYER_CHANGE_VOLUME)
       self.message_center.add_subscriber(self, self.message_center.MSGID_SMF_PLAYER_IS_PLAYING_SMF, self.func_SMF_PLAYER_IS_PLAYING_SMF)
@@ -1452,7 +1560,7 @@ class smf_player_message_class(smf_player_class):
     if self.standard_midi_file_catalog():
       self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_FNAME_SET_TEXT)
 
-  def func_SMF_PLAYER_CONTROL(self, message_data):
+  def func_SMF_PLAYER_CONTROL(self, message_data = None):
     # Callback function just after SMF Player status is changed
     #   status: PLAY / PAUSE / STOP
     def on_smf_player_status_changed(status):
@@ -1475,11 +1583,10 @@ class smf_player_message_class(smf_player_class):
       print('REPLAY MIDI PLAYER')
       if self.smf_file_selected >= 0:
         spf = self.set_smf_speed_factor(self.smf_files[self.smf_file_selected][2])
-        midi_in_player = message_data['midi_in_player']
         self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_TEMPO_SET_TEXT, {'value': spf})
         _thread.start_new_thread(self.play_standard_midi_file, (self.smf_file_path(), self.smf_files[self.smf_file_selected][1], on_smf_player_status_changed,))
 
-  def func_CHANGE_SMF_FILE_NO(self, message_data = None):
+  def func_SMF_PLAYER_CHANGE_SMF_FILE_NO(self, message_data = None):
     if self.set_playing_smf() == False:
       if self.smf_file_selected >= 0:
         delta = message_data['delta']
@@ -1498,7 +1605,7 @@ class smf_player_message_class(smf_player_class):
 
   def func_SMF_PLAYER_CHANGE_TRANSPOSE(self, message_data = None):
     delta = message_data['delta']
-    self.message_center.phone_message(self, self.message_center.MSGID_MSGID_MIDI_ALL_NOTES_OFF)
+    self.message_center.phone_message(self, self.message_center.MSGID_MIDI_ALL_NOTES_OFF)
     self.set_smf_transpose(delta)
     self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_TRANSP_SET_TEXT)
 
@@ -2609,6 +2716,7 @@ class sequencer_message_class(sequencer_class):
       self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_SET_REPEAT_SIGNS, self.func_SEQUENCER_SET_REPEAT_SIGNS)
       self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_GET_SIGNS_CURSOR, self.func_SEQUENCER_GET_SIGNS_CURSOR)
       self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_CHANGE_REPEAT_SIGNS, self.func_SEQUENCER_CHANGE_REPEAT_SIGNS)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_SET_GET_EDIT_TRACK, self.func_SEQUENCER_SET_GET_EDIT_TRACK)
 
     else:
       self.message_center = message_center_class()
@@ -2642,7 +2750,7 @@ class sequencer_message_class(sequencer_class):
     self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_FILE_OP_SET_TEXT)
     self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_TIME_SET_TEXT)
 
-    self.message_center.phone_message(self, self.message_center.MSGID_SHOW_MASTER_VOLUME_VALUE, None)
+    self.message_center.phone_message(self, self.message_center.MSGID_APPLICATION_SHOW_MASTER_VOLUME_VALUE, None)
 
     ch = self.seq_track_midi[0]
     prg = self.message_center.phone_message(self, self.message_center.MSGID_MIDI_GET_PROGRAM_NAME, {'gm_bank': self.seq_control['gmbank'][ch], 'program_number': self.seq_control['program'][ch]})
@@ -2655,7 +2763,7 @@ class sequencer_message_class(sequencer_class):
     self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_program2', 'value': prg})
     
     self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_PARM_NAME_SET_TEXT)
-    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_parm_value', 'value': prg})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_parm_value', 'value': ''})
 
     self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_track1', 'visible': False})
     self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_track2', 'visible': False})
@@ -2701,10 +2809,10 @@ class sequencer_message_class(sequencer_class):
         self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_FILE_OP_SET_TEXT)
 
   def func_pause_or_stop(self):
-    return self.message_center.phone_message(self, self.message_center.MSGID_PHONE_SEQ_GET_PAUSE_STOP_BUTTON, {'no_response': False})
+    return self.message_center.phone_message(self, self.message_center.MSGID_DEVICE_PHONE_SEQ_GET_PAUSE_STOP_BUTTON, {'no_response': False})
 
   def func_pause_to_stop(self):
-    return self.message_center.phone_message(self, self.message_center.MSGID_PHONE_SEQ_STOP_BUTTON, {'no_response': 1})
+    return self.message_center.phone_message(self, self.message_center.MSGID_DEVICE_PHONE_SEQ_STOP_BUTTON, {'no_response': 1})
 
   def func_pre_move_cursor(self):
     self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SHOW_CURSOR, {'edit_track': None, 'disp_time': False, 'disp_key': False})
@@ -2721,7 +2829,7 @@ class sequencer_message_class(sequencer_class):
     enc_button = message_data['do_operation']
     if enc_button:
       self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SHOW_CURSOR, {'edit_track': None, 'disp_time': False, 'disp_key': False})
-      self.message_center.phone_message(self, self.message_center.MSGID_PHONE_SEQ_TURN_OFF_PLAY_BUTTON, None)
+      self.message_center.phone_message(self, self.message_center.MSGID_DEVICE_PHONE_SEQ_TURN_OFF_PLAY_BUTTON, None)
       self.send_all_sequencer_settings()
 
       self.pre_play_sequencer()
@@ -3077,6 +3185,14 @@ class sequencer_message_class(sequencer_class):
   def func_SEQUENCER_GET_CURRENT_TRACK_CHANNEL(self, message_data = None):
     return self.get_track_midi()
 
+  def func_SEQUENCER_SET_GET_EDIT_TRACK(self, message_data = None):
+    if message_data is None:
+      return self.edit_track()
+
+    trknum = message_data['track_number']
+    self.edit_track(trknum)
+    return trknum
+
   def func_SEQUENCER_IS_MENU_PARM_CHANNEL(self, message_data = None):
     return self.seq_parm == self.SEQUENCER_PARM_CHANNEL
 
@@ -3369,7 +3485,7 @@ class midi_in_player_message_class(midi_in_player_class):
     if not message_center is None:
       self.message_center = message_center
       self.message_center.add_contributor(self)
-      self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_PROGRAM, self.func_MIDI_IN_PLAYER_SET_PROGRAM)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_PROGRAM_DELTA, self.func_MIDI_IN_PLAYER_SET_PROGRAM_DELTA)
       self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_IN_PLAYER_SEND_ALL_MIDI_SETTINGS, self.func_MIDI_IN_PLAYER_SEND_ALL_MIDI_SETTINGS)
       self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_REVERB, self.func_MIDI_IN_PLAYER_SET_REVERB)
       self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_CHORUS, self.func_MIDI_IN_PLAYER_SET_CHORUS)
@@ -3379,11 +3495,15 @@ class midi_in_player_message_class(midi_in_player_class):
       self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_IN_PLAYER_GET_MIDI_IN_SETTING, self.func_MIDI_IN_PLAYER_GET_MIDI_IN_SETTING)
       self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_IN_PLAYER_MASTER_VOLUME_DELTA, self.func_MIDI_IN_PLAYER_MASTER_VOLUME_DELTA)
       self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_SETTING4PARAMS, self.func_MIDI_IN_PLAYER_SET_SETTING4PARAMS)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_CHANNEL_DELTA, self.func_MIDI_IN_PLAYER_SET_CHANNEL_DELTA)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_IN_PLAYER_LOAD_SET_FILE, self.func_MIDI_IN_PLAYER_LOAD_SET_FILE)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_IN_PLAYER_SAVE_SET_FILE, self.func_MIDI_IN_PLAYER_SAVE_SET_FILE)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_DEFAULT, self.func_MIDI_IN_PLAYER_SET_DEFAULT)
 
     else:
       self.message_center = message_center_class()
 
-  def func_MIDI_IN_PLAYER_SET_PROGRAM(self, message_data = None):
+  def func_MIDI_IN_PLAYER_SET_PROGRAM_DELTA(self, message_data = None):
     dlt = message_data['delta']
     self.set_midi_in_program(dlt)
     channel = self.midi_in_channel()
@@ -3396,13 +3516,48 @@ class midi_in_player_message_class(midi_in_player_class):
     self.send_all_midi_in_settings()
 
   def func_MIDI_IN_PLAYER_SET_REVERB(self, message_data = None):
-    self.set_midi_in_reverb(message_data['program'], message_data['level'], message_data['feedback'])
+    if message_data is None:
+      self.set_midi_in_reverb()
+
+    else:
+      if not 'program' in message_data.keys():
+        message_data['program'] = None
+      if not 'level' in message_data.keys():
+        message_data['level'] = None
+      if not 'feedback' in message_data.keys():
+        message_data['feedback'] = None
+
+      self.set_midi_in_reverb(message_data['program'], message_data['level'], message_data['feedback'])
 
   def func_MIDI_IN_PLAYER_SET_CHORUS(self, message_data = None):
-    self.set_midi_in_chorus(message_data['program'], message_data['level'], message_data['feedback'], message_data['delay'])
+    if message_data is None:
+      self.set_midi_in_chorus()
+
+    else:
+      if not 'program' in message_data.keys():
+        message_data['program'] = None
+      if not 'level' in message_data.keys():
+        message_data['level'] = None
+      if not 'feedback' in message_data.keys():
+        message_data['feedback'] = None
+      if not 'delay' in message_data.keys():
+        message_data['delay'] = None
+
+      self.set_midi_in_chorus(message_data['program'], message_data['level'], message_data['feedback'], message_data['delay'])
 
   def func_MIDI_IN_PLAYER_SET_VIBRATE(self, message_data = None):
-    self.set_midi_in_vibrate(message_data['rate'], message_data['depth'], message_data['delay'])
+    if message_data is None:
+      self.set_midi_in_vibrate()
+
+    else:
+      if not 'rate' in message_data.keys():
+        message_data['rate'] = None
+      if not 'depth' in message_data.keys():
+        message_data['depth'] = None
+      if not 'delay' in message_data.keys():
+        message_data['delay'] = None
+
+      self.set_midi_in_vibrate(message_data['rate'], message_data['depth'], message_data['delay'])
 
   def func_MIDI_IN_PLAYER_SET_GET_SET_NUMBER(self, message_data = None):
     if not message_data is None:
@@ -3428,6 +3583,49 @@ class midi_in_player_message_class(midi_in_player_class):
   def func_MIDI_IN_PLAYER_SET_SETTING4PARAMS(self, message_data = None):
     self.set_midi_in_setting4(message_data['channel'], message_data['key'], message_data['index'], message_data['value'])
 
+  def func_MIDI_IN_PLAYER_SET_CHANNEL_DELTA(self, message_data):
+    return self.set_midi_in_channel(message_data['delta'])
+
+  def func_MIDI_IN_PLAYER_LOAD_SET_FILE(self, message_data = None):
+    if message_data is None:
+      set_number = self.set_midi_in_set_num()
+
+    elif 'set_number' in message_data.keys():
+      set_number = message_data['set_number']
+
+    midi_in_set = self.read_midi_in_settings(set_number)
+    if not midi_in_set is None:
+      print('LOAD MIDI-IN SET:', midi_in_set)
+      self.set_midi_in_setting(midi_in_set)
+      self.message_center.phone_message(self, self.message_center.MSGID_APPLICATION_SET_MIDI_IN_CHANNEL, {'delta': 0})
+      self.set_midi_in_program(0)
+      self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_PROGRAM_DELTA, {'delta': 0})
+      self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_REVERB)
+      self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_CHORUS)
+      self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_VIBRATE)
+      self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SEND_ALL_MIDI_SETTINGS)
+      return True
+
+    else:
+      return False
+
+  def func_MIDI_IN_PLAYER_SAVE_SET_FILE(self, message_data = None):
+    if message_data is None:
+      set_number = self.set_midi_in_set_num()
+
+    elif 'set_number' in message_data.keys():
+      set_number = message_data['set_number']
+        
+    self.write_midi_in_settings(set_number)
+    print('SAVE MIDI IN SET:', set_number, self.get_midi_in_setting())
+
+  def func_MIDI_IN_PLAYER_SET_DEFAULT(self, message_data = None):
+    midi_in_settings = self.get_midi_in_setting()
+    self.message_center.phone_message(self, self.message_center.MSGID_MIDI_SET_INSTRUMENT, {'gm_bank': midi_in_settings[self.midi_in_channel()]['gmbank'], 'channel': self.midi_in_channel(), 'program_number': midi_in_settings[self.midi_in_channel()]['program']})
+    for ch in range(16):
+      self.message_center.phone_message(self, self.message_center.MSGID_MIDI_SET_REVERB, {'channel': ch, 'program': 0, 'level': 0, 'feedback': 0})
+      self.message_center.phone_message(self, self.message_center.MSGID_MIDI_SET_CHORUS, {'channel': ch, 'program': 0, 'level': 0, 'feedback': 0, 'delay': 0})
+      self.message_center.phone_message(self, self.message_center.MSGID_MIDI_SET_VIBRATE, {'channel': ch, 'rate': 0, 'depth': 0, 'delay': 0})
 
 ################# End of midi_in_player_message_class Definition #################
 
@@ -3435,7 +3633,7 @@ class midi_in_player_message_class(midi_in_player_class):
 #####################################
 # View base class for M5Stack CORE2
 #####################################
-class view_m5stack_core2(message_center_class):
+class view_m5stack_core2():
   def __init__(self):
     self.label_list = {}      # {Label name: its object, ...}
 
@@ -3489,6 +3687,10 @@ class view_m5stack_core2(message_center_class):
     else:
       return False
 
+  # Clear display
+  def display_clear(self, color = 0x000000):
+    M5.Lcd.clear(color)
+
 ################# End of view_m5stack_core2 Definition #################
 
 
@@ -3522,6 +3724,7 @@ class view_smf_player_class(view_m5stack_core2):
       self.message_center.add_subscriber(self, self.message_center.VIEW_SMF_PLAYER_MASTER_VOLUME_SET_TEXT, self.func_SMF_PLAYER_MASTER_VOLUME_SET_TEXT)
       self.message_center.add_subscriber(self, self.message_center.VIEW_SMF_PLAYER_ACTIVATED, self.func_SMF_PLAYER_ACTIVATED)
       self.message_center.add_subscriber(self, self.message_center.VIEW_SMF_PLAYER_INACTIVATED, self.func_SMF_PLAYER_INACTIVATED)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_SMF_PLAYER_SCREEN_VISIBILITY, self.func_SMF_PLAYER_SCREEN_VISIBILITY)
 
     else:
       self.message_center = self
@@ -3618,6 +3821,26 @@ class view_smf_player_class(view_m5stack_core2):
   def func_SMF_PLAYER_MASTER_VOLUME_SET_TEXT(self, message_data):
     self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_TEXT, {'label': 'label_master_volume', 'format': '{:0>3d}', 'value': self.data_obj.midi_obj.get_master_volume()})
 
+  def func_SMF_PLAYER_SCREEN_VISIBILITY(self, message_data = None):
+    visible = message_data['visible']
+
+    # Tile labels
+    self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'title_smf', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'title_smf_params', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'title_general', 'visible': visible})
+
+    # SMF data labels
+    self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_master_volume', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_file', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_fname', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_fnum', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_transp', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_volume', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_tempo', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_parameter', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_parm_value', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_parm_title', 'visible': visible})
+
 ################# End of view_smf_player_class Definition #################
 
 
@@ -3648,6 +3871,8 @@ class view_midi_in_player_class(view_m5stack_core2):
       self.message_center.add_subscriber(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARM_TITLE_SET_TEXT, self.func_MIDI_IN_PLAYER_PARM_TITLE_SET_TEXT)
       self.message_center.add_subscriber(self, self.message_center.VIEW_MIDI_IN_PLAYER_ACTIVATED, self.func_MIDI_IN_PLAYER_ACTIVATED)
       self.message_center.add_subscriber(self, self.message_center.VIEW_MIDI_IN_PLAYER_INACTIVATED, self.func_MIDI_IN_PLAYER_INACTIVATED)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_MIDI_IN_PLAYER_INITIAL_DISPLAY, self.func_MIDI_IN_PLAYER_INITIAL_DISPLAY)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_MIDI_IN_PLAYER_SCREEN_VISIBILITY, self.func_MIDI_IN_PLAYER_SCREEN_VISIBILITY)
 
     else:
       self.message_center = self
@@ -3667,6 +3892,23 @@ class view_midi_in_player_class(view_m5stack_core2):
     self.add_label('label_midi_parameter', 204, 140, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
     self.add_label('label_midi_parm_value', 264, 140, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
     self.add_label('label_midi_parm_title', 204, 100, 1.0, 0x00ccff, 0x222222, Widgets.FONTS.DejaVu18)
+
+  def func_MIDI_IN_PLAYER_INITIAL_DISPLAY(self, message_data):
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'title_midi_in', 'value': 'MIDI-IN PLAYER'})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'title_midi_in_params', 'value': 'NO. FIL  MCH PROG PARM VAL'})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_SET_TEXT)
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in_set_ctrl', 'value': message_data['file_op']})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARM_TITLE_SET_TEXT)
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARAMETER_SET_TEXT)
+
+    midi_in_settings = self.data_obj.get_midi_in_setting()
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parm_value', 'format': '{:03d}', 'value': midi_in_settings[self.data_obj.midi_in_channel()]['reverb'][0]})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARM_VALUE_SET_TEXT)
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_COLOR, {'label': 'label_midi_parameter', 'fore': 0x00ffcc, 'back': 0x222222})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_COLOR, {'label': 'label_midi_parm_value', 'fore': 0xffffff, 'back': 0x222222})
+
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in', 'value': '*'})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_in', 'visible': False})
 
   def func_MIDI_IN_PLAYER_ACTIVATED(self, message_data):
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_COLOR, {'label': 'title_midi_in_params', 'fore': 0xff4040, 'back': 0x555555})
@@ -3727,6 +3969,24 @@ class view_midi_in_player_class(view_m5stack_core2):
     message_data['label'] = 'label_midi_parm_title'
     return self.label_setText(message_data)
 
+  def func_MIDI_IN_PLAYER_SCREEN_VISIBILITY(self, message_data = None):
+    visible = message_data['visible']
+
+    # Tile labels
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'title_midi_in', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'title_midi_in_params', 'visible': visible})
+
+    # MIDI data labels
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_in_set', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_in_set_ctrl', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_in', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_channel', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_program', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_program_name', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_parameter', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_parm_value', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_parm_title', 'visible': visible})
+
 ################# End of view_midi_in_player_class Definition #################
 
 
@@ -3749,7 +4009,7 @@ class view_sequencer_class(view_m5stack_core2):
       self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, self.label_setVisible)
       self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_SET_COLOR, self.label_setColor)
       self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_TRACK1_SET_TEXT, self.func_SEQUENCER_TRACK1_SET_TEXT)
-      self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_TRACK2_SET_TEXT, self.func_SEQUENCER_TRACK1_SET_TEXT)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_TRACK2_SET_TEXT, self.func_SEQUENCER_TRACK2_SET_TEXT)
       self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_KEY1_SET_TEXT, self.func_SEQUENCER_KEY1_SET_TEXT)
       self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_KEY2_SET_TEXT, self.func_SEQUENCER_KEY2_SET_TEXT)
       self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_FILE_SET_TEXT, self.func_SEQUENCER_FILE_SET_TEXT)
@@ -3771,6 +4031,9 @@ class view_sequencer_class(view_m5stack_core2):
       self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_VOLUME_RATIO_SET_TEXT, self.func_SEQUENCER_VOLUME_RATIO_SET_TEXT)
       self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_DRAW_KEYBOARD, self.func_SEQUENCER_DRAW_KEYBOARD)
       self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_ACTIVATED, self.func_SEQUENCER_ACTIVATED)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_SCREEN_VISIBILITY, self.func_SEQUENCER_SCREEN_VISIBILITY)
+
+      self.message_center.add_subscriber(self, self.message_center.VIEW_DISPLAY_CLEAR, self.func_DISPLAY_CLEAR)
 
     else:
       self.message_center = self
@@ -4239,6 +4502,46 @@ class view_sequencer_class(view_m5stack_core2):
     else:
       self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_parm_value', 'value': ''})
 
+  def func_SEQUENCER_SCREEN_VISIBILITY(self, message_data = None):
+    visible = message_data['visible']
+
+    # SEQUENCER title labels
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'title_seq_track1', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'title_seq_track2', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'title_seq_file', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'title_seq_time', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'title_seq_master_volume', 'visible': visible})
+
+    # SEQUENCER data labels
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_track1', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_track2', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_key1', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_key2', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_file', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_file_op', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_time', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_master_volume', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_parm_name', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_parm_value', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_program1', 'visible': visible})
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_program2', 'visible': visible})
+
+    # Draw sequencer tracks
+    if visible:
+      self.message_center.phone_message(self, self.message_center.MSGID_SEQUENCER_SET_NOTE_ON_CURSOR)
+      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_DRAW_KEYBOARD)
+      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_DRAW_TRACK)
+      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SHOW_CURSOR, {'edit_track': 0, 'disp_time': True, 'disp_key': True})
+      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SHOW_CURSOR, {'edit_track': 1, 'disp_time': True, 'disp_key': True})
+  
+  def func_DISPLAY_CLEAR(self, message_data = None):
+    color = None
+    if not message_data is None:
+      if 'color' in message_data.keys():
+        color = message_data['color']
+
+    self.display_clear(color)
+
 ################# End of view_sequencer_class Definition #################
 
 
@@ -4247,12 +4550,7 @@ class view_sequencer_class(view_m5stack_core2):
 ###############################################
 class unit5c2_synth_application_class(message_center_class):
   # Constructor
-  def __init__(self, midi_obj, smf_player_obj, midi_in_player_obj, sequencer_obj, message_center = None):
-    self.midi_obj = midi_obj
-    self.smf_player_obj = smf_player_obj
-    self.midi_in_player_obj = midi_in_player_obj
-    self.sequencer_obj = sequencer_obj
-
+  def __init__(self, message_center = None):
     # Screen mode
     self.SCREEN_MODE_PLAYER = 0
     self.SCREEN_MODE_SEQUENCER = 1
@@ -4275,14 +4573,15 @@ class unit5c2_synth_application_class(message_center_class):
     if not message_center is None:
       self.message_center = message_center
       self.message_center.add_contributor(self)
-      self.message_center.add_subscriber(self, self.message_center.MSGID_SHOW_MASTER_VOLUME_VALUE, self.func_SHOW_MASTER_VOLUME_VALUE)
-      self.message_center.add_subscriber(self, self.message_center.MSGID_SET_MIDI_IN_CHANNEL, self.func_SET_MIDI_IN_CHANNEL)
-      self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_FILE_OPERATION, self.func_MIDI_FILE_OPERATION)
-      self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_FILE_LOAD_SAVE, self.func_MIDI_FILE_LOAD_SAVE)
-      self.message_center.add_subscriber(self, self.message_center.MSGID_SWITCH_UPPER_LOWER, self.func_SWITCH_UPPER_LOWER)
-      self.message_center.add_subscriber(self, self.message_center.MSGID_SETUP_PLAYER_SCREEN, self.func_SETUP_PLAYER_SCREEN)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_APPLICATION_SHOW_MASTER_VOLUME_VALUE, self.func_APPLICATION_SHOW_MASTER_VOLUME_VALUE)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_APPLICATION_SET_MIDI_IN_CHANNEL, self.func_APPLICATION_SET_MIDI_IN_CHANNEL)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_APPLICATION_MIDI_FILE_OPERATION, self.func_APPLICATION_MIDI_FILE_OPERATION)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_APPLICATION_MIDI_FILE_LOAD_SAVE, self.func_APPLICATION_MIDI_FILE_LOAD_SAVE)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_APPLICATION_SWITCH_UPPER_LOWER, self.func_APPLICATION_SWITCH_UPPER_LOWER)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_APPLICATION_SETUP_PLAYER_SCREEN, self.func_APPLICATION_SETUP_PLAYER_SCREEN)
       self.message_center.add_subscriber(self, self.message_center.MSGID_APPLICATION_SCREEN_CHANGE, self.func_APPLICATION_SCREEN_CHANGE)
       self.message_center.add_subscriber(self, self.message_center.MSGID_APPLICATION_PLAYER_CONTROL, self.func_APPLICATION_PLAYER_CONTROL)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_APPLICATION_FLUSH_MIDI_IN_SIGN, self.func_APPLICATION_FLUSH_MIDI_IN_SIGN)
 
     else:
       self.message_center = self
@@ -4306,16 +4605,15 @@ class unit5c2_synth_application_class(message_center_class):
 
     return (None, -1)
 
-
-  def func_SHOW_MASTER_VOLUME_VALUE(self, message_data):
+  def func_APPLICATION_SHOW_MASTER_VOLUME_VALUE(self, message_data):
     if self.app_screen_mode == self.SCREEN_MODE_PLAYER:
       self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_MASTER_VOLUME_SET_TEXT)
   
     elif self.app_screen_mode == self.SCREEN_MODE_SEQUENCER:
       self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_MASTER_VOLUME_SET_TEXT)
 
-  def func_SET_MIDI_IN_CHANNEL(self, message_data):
-    channel = self.midi_in_player_obj.set_midi_in_channel(message_data['delta'])
+  def func_APPLICATION_SET_MIDI_IN_CHANNEL(self, message_data):
+    channel = self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_CHANNEL_DELTA, {'delta': message_data['delta']})
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_CHANNEL_SET_TEXT, {'value': channel + 1})
 
     # Reset the parameter to edit
@@ -4324,27 +4622,16 @@ class unit5c2_synth_application_class(message_center_class):
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARAMETER_SET_TEXT)
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARM_VALUE_SET_TEXT)
 
-  def func_MIDI_FILE_OPERATION(self, message_data):
+  def func_APPLICATION_MIDI_FILE_OPERATION(self, message_data):
     delta = message_data['delta']
     if delta != 0:
       self.enc_midi_set_ctrl = (self.enc_midi_set_ctrl + delta) % 3
       self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_CTRL_SET_TEXT, None)
 
-  def func_MIDI_FILE_LOAD_SAVE(self, message_data):
+  def func_APPLICATION_MIDI_FILE_LOAD_SAVE(self, message_data):
     # Load a MIDI settings file
     if self.enc_midi_set_ctrl == self.MIDI_SET_FILE_LOAD:
-      midi_in_set = self.midi_in_player_obj.read_midi_in_settings(self.midi_in_player_obj.set_midi_in_set_num())
-      if not midi_in_set is None:
-        print('LOAD MIDI IN SET:', midi_in_set)
-        self.midi_in_player_obj.set_midi_in_setting(midi_in_set)
-        self.message_center.phone_message(self, self.message_center.MSGID_SET_MIDI_IN_CHANNEL, {'delta': 0})
-        self.midi_in_player_obj.set_midi_in_program(0)
-        self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_PROGRAM, {'delta': 0})
-        self.midi_in_player_obj.set_midi_in_reverb()
-        self.midi_in_player_obj.set_midi_in_chorus()
-        self.midi_in_player_obj.set_midi_in_vibrate()
-        self.midi_in_player_obj.send_all_midi_in_settings()
-      else:
+      if self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_LOAD_SET_FILE) == False:
         print('MIDI IN SET: NO FILE')
 
       self.enc_midi_set_ctrl = self.MIDI_SET_FILE_NOP
@@ -4352,38 +4639,31 @@ class unit5c2_synth_application_class(message_center_class):
 
     # Save MIDI settings file
     elif self.enc_midi_set_ctrl == self.MIDI_SET_FILE_SAVE:
-      self.midi_in_player_obj.write_midi_in_settings(self.midi_in_player_obj.set_midi_in_set_num())
-      print('SAVE MIDI IN SET:', self.midi_in_player_obj.set_midi_in_set_num(), self.midi_in_player_obj.get_midi_in_setting())
-
+      self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SAVE_SET_FILE)
       self.enc_midi_set_ctrl = self.MIDI_SET_FILE_NOP
       self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_CTRL_SET_TEXT, None)
 
-  def func_SWITCH_UPPER_LOWER(self, message_data):
+  def func_APPLICATION_SWITCH_UPPER_LOWER(self, message_data):
     # Player screen
     if self.app_screen_mode == self.SCREEN_MODE_PLAYER:
       # SMF Player side
       if message_data['slide_switch_value']:
-#        self.func_MIDI_IN_PLAYER_INACTIVATED(None)
         self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_INACTIVATED)
-#        self.func_SMF_PLAYER_ACTIVATED(None)
         self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_ACTIVATED)
 
       # MIDI-IN Player side
       else:
-#        self.func_SMF_PLAYER_INACTIVATED(None)
         self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_INACTIVATED)
-#        self.func_MIDI_IN_PLAYER_ACTIVATED(None)
         self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_ACTIVATED)
-        self.midi_in_player_obj.send_all_midi_in_settings()
+        self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SEND_ALL_MIDI_SETTINGS)        
 
     # Sequencer screen
-    self.sequencer_obj.edit_track(0 if message_data['slide_switch_value'] else 1)
+    self.message_center.phone_message(self, self.message_center.MSGID_SEQUENCER_SET_GET_EDIT_TRACK, {'track_number': 0 if message_data['slide_switch_value'] else 1})
     if self.app_screen_mode == self.SCREEN_MODE_SEQUENCER:
-#      self.func_SEQUENCER_ACTIVATED(None)
       self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_ACTIVATED)
 
   # Set up the program
-  def func_SETUP_PLAYER_SCREEN(self, message_data):
+  def func_APPLICATION_SETUP_PLAYER_SCREEN(self, message_data):
 
     def set_smf_reverb(prog=None, level=None, fback=None):
       self.message_center.phone_message(self, self.message_center.MSGID_SMF_PLAYER_SET_REVERB, {'program': prog, 'level': level, 'feedback': fback})
@@ -4426,20 +4706,16 @@ class unit5c2_synth_application_class(message_center_class):
     for effector in self.enc_parameter_info:
       self.enc_total_parameters = self.enc_total_parameters + len(effector['params'])
 
-    midi_in_settings = self.midi_in_player_obj.get_midi_in_setting()
-    self.message_center.phone_message(self, self.message_center.MSGID_MIDI_SET_INSTRUMENT, {'gm_bank': midi_in_settings[self.midi_in_player_obj.midi_in_channel()]['gmbank'], 'channel': self.midi_in_player_obj.midi_in_channel(), 'program_number': midi_in_settings[self.midi_in_player_obj.midi_in_channel()]['program']})
-    for ch in range(16):
-      self.midi_obj.set_reverb(ch, 0, 0, 0)
-      self.midi_obj.set_chorus(ch, 0, 0, 0, 0)
+    # Set synthesizer default
+    self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_DEFAULT)
 
     # Initialize GUI display
     self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_TEXT, {'label': 'title_smf', 'value': 'SMF PLAYER'})
     self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_TEXT, {'label': 'title_smf_params', 'value': 'NO. TRN VOL TEMP PARM VAL'})
     self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_TEXT, {'label': 'title_general', 'value': 'VOL'})
 
-    master_volume = self.midi_obj.get_master_volume()
-    self.midi_in_player_obj.set_synth_master_volume(0)
-    self.message_center.phone_message(self, self.message_center.MSGID_SHOW_MASTER_VOLUME_VALUE, None)
+    self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_MASTER_VOLUME_DELTA, {'delta': 0})
+    self.message_center.phone_message(self, self.message_center.MSGID_APPLICATION_SHOW_MASTER_VOLUME_VALUE, None)
 
     self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_TEXT, {'label': 'label_smf_file', 'value': 'FILE:'})
     self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_file', 'visible': True})
@@ -4452,9 +4728,8 @@ class unit5c2_synth_application_class(message_center_class):
     self.message_center.phone_message(self, self.message_center.MSGID_SMF_PLAYER_CHANGE_VOLUME, {'delta': 0})    
     self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_TEMPO_SET_TEXT)
 
-    self.midi_in_player_obj.set_midi_in_channel(0)
-    self.midi_in_player_obj.set_midi_in_program(0)
-    self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_PROGRAM, {'delta': 0})
+    self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_CHANNEL_DELTA, {'delta': 0})
+    self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_PROGRAM_DELTA, {'delta': 0})
     self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_PARM_TITLE_SET_TEXT)
     self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_PARAMETER_SET_TEXT)
 
@@ -4464,168 +4739,44 @@ class unit5c2_synth_application_class(message_center_class):
     self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_COLOR, {'label': 'label_smf_parm_value', 'fore': 0xffffff, 'back': 0x222222})
 
     # Prepare SYNTH data and all notes off
-    self.message_center.phone_message(self, self.message_center.MSGID_MSGID_MIDI_ALL_NOTES_OFF)
+    self.message_center.phone_message(self, self.message_center.MSGID_MIDI_ALL_NOTES_OFF)
 
     # Load default MIDI IN settings
-    midi_in_set = self.midi_in_player_obj.read_midi_in_settings(self.midi_in_player_obj.set_midi_in_set_num())
-    if not midi_in_set is None:
-      print('LOAD MIDI IN SET:', self.midi_in_player_obj.set_midi_in_set_num())
-      self.midi_in_player_obj.set_midi_in_setting(midi_in_set)
-      self.message_center.phone_message(self, self.message_center.MSGID_SET_MIDI_IN_CHANNEL, {'delta': 0})
-      self.midi_in_player_obj.set_midi_in_program(0)
-      self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_PROGRAM, {'delta': 0})
-      self.midi_in_player_obj.set_midi_in_reverb()
-      self.midi_in_player_obj.set_midi_in_chorus()
-      self.midi_in_player_obj.set_midi_in_vibrate()
-      self.midi_in_player_obj.send_all_midi_in_settings()
-    else:
-      print('MIDI IN SET: NO FILE')
+    if self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_LOAD_SET_FILE) == False:
+      print('DEFAULT MIDI-IN SET: NO FILE')
+
+    # All notes off
+    self.message_center.phone_message(self, self.message_center.MSGID_MIDI_ALL_NOTES_OFF)
 
     # GUI for MIDI-IN Player draw
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'title_midi_in', 'value': 'MIDI-IN PLAYER'})
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'title_midi_in_params', 'value': 'NO. FIL  MCH PROG PARM VAL'})
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_SET_TEXT)
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in_set_ctrl', 'value': self.enc_midi_set_ctrl_list[self.enc_midi_set_ctrl]})
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARM_TITLE_SET_TEXT)
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARAMETER_SET_TEXT)
-
-    midi_in_settings = self.midi_in_player_obj.get_midi_in_setting()
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parm_value', 'format': '{:03d}', 'value': midi_in_settings[self.midi_in_player_obj.midi_in_channel()]['reverb'][0]})
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARM_VALUE_SET_TEXT)
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_COLOR, {'label': 'label_midi_parameter', 'fore': 0x00ffcc, 'back': 0x222222})
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_COLOR, {'label': 'label_midi_parm_value', 'fore': 0xffffff, 'back': 0x222222})
-
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in', 'value': '*'})
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_in', 'visible': False})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_INITIAL_DISPLAY, {'file_op': self.enc_midi_set_ctrl_list[self.enc_midi_set_ctrl]})
 
   # Screen change
   def func_APPLICATION_SCREEN_CHANGE(self, message_data):
-    M5.Lcd.clear(0x222222)
+    self.message_center.phone_message(self, self.message_center.VIEW_DISPLAY_CLEAR, {'color': 0x222222})
 
-    master_volume = self.midi_obj.get_master_volume()
     self.app_screen_mode = (self.app_screen_mode + message_data['delta']) % 2
 
     if   self.app_screen_mode == self.SCREEN_MODE_PLAYER:
-      # SEQUENCER title labels
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'title_seq_track1', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'title_seq_track2', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'title_seq_file', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'title_seq_time', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'title_seq_master_volume', 'visible': False})
+      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SCREEN_VISIBILITY, {'visible': False})
+      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SCREEN_VISIBILITY, {'visible': True})
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SCREEN_VISIBILITY, {'visible': True})
+      self.message_center.send_message(self, self.message_center.MSGID_APPLICATION_SHOW_MASTER_VOLUME_VALUE, None)
 
-      # SEQUENCER data labels
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_track1', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_track2', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_key1', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_key2', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_file', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_file_op', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_time', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_master_volume', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_parm_name', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_parm_value', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_program1', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_program2', 'visible': False})
-
-      # Tile labels
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'title_smf', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'title_smf_params', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'title_midi_in', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'title_midi_in_params', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'title_general', 'visible': True})
-
-      # SMF data labels
-      self.message_center.send_message(self, self.message_center.MSGID_SHOW_MASTER_VOLUME_VALUE, None)
-
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_master_volume', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_file', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_fname', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_fnum', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_transp', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_volume', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_tempo', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_parameter', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_parm_value', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_parm_title', 'visible': True})
-
-      # MIDI data labels
-      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_in_set', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_in_set_ctrl', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_in', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_channel', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_program', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_program_name', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_parameter', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_parm_value', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_parm_title', 'visible': True})
-
-      self.midi_in_player_obj.send_all_midi_in_settings()
+      self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SEND_ALL_MIDI_SETTINGS)
 
     elif self.app_screen_mode == self.SCREEN_MODE_SEQUENCER:
-      # Tile labels
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'title_smf', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'title_smf_params', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'title_midi_in', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'title_midi_in_params', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'title_general', 'visible': False})
+      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SCREEN_VISIBILITY, {'visible': False})
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SCREEN_VISIBILITY, {'visible': False})
+      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SCREEN_VISIBILITY, {'visible': True})
+      self.message_center.send_message(self, self.message_center.MSGID_APPLICATION_SHOW_MASTER_VOLUME_VALUE, None)
 
-      # SMF data labels
-      self.message_center.send_message(self, self.message_center.MSGID_SHOW_MASTER_VOLUME_VALUE, None)
-
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_master_volume', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_file', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_fname', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_fnum', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_transp', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_volume', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_tempo', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_parameter', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_parm_value', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_VISIBLE, {'label': 'label_smf_parm_title', 'visible': False})
-
-      # MIDI data labels
-      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_in_set', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_in_set_ctrl', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_in', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_channel', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_program', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_program_name', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_parameter', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_parm_value', 'visible': False})
-      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_parm_title', 'visible': False})
-
-      # SEQUENCER title labels
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'title_seq_track1', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'title_seq_track2', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'title_seq_file', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'title_seq_time', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'title_seq_master_volume', 'visible': True})
-
-      # SEQUENCER data labels
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_track1', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_track2', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_key1', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_key2', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_file', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_file_op', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_time', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_master_volume', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_parm_name', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_parm_value', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_program1', 'visible': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_VISIBLE, {'label': 'label_seq_program2', 'visible': True})
-
-      # Draw sequencer tracks
-      self.sequencer_obj.set_cursor_note(self.sequencer_obj.sequencer_find_note(self.sequencer_obj.edit_track(), self.sequencer_obj.get_seq_time_cursor(), self.sequencer_obj.get_seq_key_cursor(self.sequencer_obj.edit_track())))
-#      self.sequencer_obj.sequencer_draw_keyboard(0)
-#      self.sequencer_obj.sequencer_draw_keyboard(1)     
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_DRAW_KEYBOARD)
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_DRAW_TRACK)
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SHOW_CURSOR, {'edit_track': 0, 'disp_time': True, 'disp_key': True})
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SHOW_CURSOR, {'edit_track': 1, 'disp_time': True, 'disp_key': True})
+  def func_APPLICATION_FLUSH_MIDI_IN_SIGN(self, message_data = None):
+    if self.app_screen_mode == self.SCREEN_MODE_PLAYER:
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in', 'value': '*' if message_data['midi_in'] else ''})
 
   def func_APPLICATION_PLAYER_CONTROL(self, message_data = None):
-    self.message_center.send_message(self, self.message_center.MSGID_SMF_PLAYER_CONTROL, {'midi_in_player': self.midi_in_player_obj})
+    self.message_center.send_message(self, self.message_center.MSGID_SMF_PLAYER_CONTROL)
 
 ################# End of unit5c2_synth_application_class Definition #################
 
@@ -4710,24 +4861,24 @@ class device_8encoder_class(message_center_class):
     if not message_center is None:
       self.message_center = message_center
       self.message_center.add_contributor(self)
-      self.message_center.add_subscriber(self, self.message_center.MSGID_PHONE_SEQ_TURN_OFF_PLAY_BUTTON, self.func_PHONE_SEQ_TURN_OFF_PLAY_BUTTON)
-      self.message_center.add_subscriber(self, self.message_center.MSGID_PHONE_SEQ_GET_PAUSE_STOP_BUTTON, self.func_PHONE_SEQ_GET_PAUSE_STOP_BUTTON)
-      self.message_center.add_subscriber(self, self.message_center.MSGID_PHONE_SEQ_STOP_BUTTON, self.func_PHONE_SEQ_STOP_BUTTON)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_DEVICE_PHONE_SEQ_TURN_OFF_PLAY_BUTTON, self.func_DEVICE_PHONE_SEQ_TURN_OFF_PLAY_BUTTON)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_DEVICE_PHONE_SEQ_GET_PAUSE_STOP_BUTTON, self.func_DEVICE_PHONE_SEQ_GET_PAUSE_STOP_BUTTON)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_DEVICE_PHONE_SEQ_STOP_BUTTON, self.func_DEVICE_PHONE_SEQ_STOP_BUTTON)
     else:
       self.message_center = self
 
-  def func_PHONE_SEQ_TURN_OFF_PLAY_BUTTON(self, message_data):
+  def func_DEVICE_PHONE_SEQ_TURN_OFF_PLAY_BUTTON(self, message_data):
     scan_enc_channel = self.ENC_SEQ_SET1 % 10
     while self.encoder8_0.get_button_status(scan_enc_channel) == False:
       time.sleep(0.1)
 
     return True
 
-  def func_PHONE_SEQ_GET_PAUSE_STOP_BUTTON(self, message_data):
+  def func_DEVICE_PHONE_SEQ_GET_PAUSE_STOP_BUTTON(self, message_data):
     scan_enc_channel = self.ENC_SEQ_SET1 % 10
     return not self.encoder8_0.get_button_status(scan_enc_channel)
 
-  def func_PHONE_SEQ_STOP_BUTTON(self, message_data):
+  def func_DEVICE_PHONE_SEQ_STOP_BUTTON(self, message_data):
     scan_enc_channel = self.ENC_SEQ_SET1 % 10
     count = -1
     if self.encoder8_0.get_button_status(scan_enc_channel) == False:
@@ -4787,7 +4938,7 @@ class device_8encoder_class(message_center_class):
 
     # The slide switch status is changed
     if self.slide_switch_change:
-      self.message_center.send_message(self, self.message_center.MSGID_SWITCH_UPPER_LOWER, {'slide_switch_value': self.slide_switch_value})
+      self.message_center.send_message(self, self.message_center.MSGID_APPLICATION_SWITCH_UPPER_LOWER, {'slide_switch_value': self.slide_switch_value})
 
     # Scan encoders
     for enc_ch in range(1,9):
@@ -4873,7 +5024,7 @@ class device_8encoder_class(message_center_class):
       if enc_menu == self.ENC_SMF_FILE:
           # Select a MIDI file
           if delta != 0:
-            self.message_center.send_message(self, self.message_center.MSGID_CHANGE_SMF_FILE_NO, {'delta': delta})
+            self.message_center.send_message(self, self.message_center.MSGID_SMF_PLAYER_CHANGE_SMF_FILE_NO, {'delta': delta})
 
           # Play the selected MIDI file or stop playing
           if enc_button == True:
@@ -4994,23 +5145,23 @@ class device_8encoder_class(message_center_class):
       elif enc_menu == self.ENC_MIDI_FILE:
         # File control
         if delta != 0:
-          self.message_center.send_message(self, self.message_center.MSGID_MIDI_FILE_OPERATION, {'delta': delta})
+          self.message_center.send_message(self, self.message_center.MSGID_APPLICATION_MIDI_FILE_OPERATION, {'delta': delta})
 
         # File operation button
         if enc_button and self.enc_button_ch[enc_ch-1]:
-          self.message_center.send_message(self, self.message_center.MSGID_MIDI_FILE_LOAD_SAVE, None)
+          self.message_center.send_message(self, self.message_center.MSGID_APPLICATION_MIDI_FILE_LOAD_SAVE, None)
 
       # Select MIDI channel to edit
       elif enc_menu == self.ENC_MIDI_CHANNEL:
         # Select MIDI channel to MIDI-IN play
         if delta != 0:
-          self.message_center.phone_message(self, self.message_center.MSGID_SET_MIDI_IN_CHANNEL, {'delta': delta})
-          self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_PROGRAM, {'delta': 0})
+          self.message_center.phone_message(self, self.message_center.MSGID_APPLICATION_SET_MIDI_IN_CHANNEL, {'delta': delta})
+          self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_PROGRAM_DELTA, {'delta': 0})
 
         # All notes off of MIDI-IN player channel
         if enc_button == True:
           ch = self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_GET_MIDI_IN_CHANNEL)
-          self.message_center.phone_message(self, self.message_center.MSGID_MSGID_MIDI_ALL_NOTES_OFF, {'channel': ch})
+          self.message_center.phone_message(self, self.message_center.MSGID_MIDI_ALL_NOTES_OFF, {'channel': ch})
 #PITCH BEND TEST          self.message_center.phone_message(self, self.message_center.MSGID_MIDI_SEND_PITCH_BEND, {'channel': ch, 'value': 1000})
 
       # Select program for MIDI channel
@@ -5024,12 +5175,12 @@ class device_8encoder_class(message_center_class):
 
         # Select program
         if delta != 0:
-          self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_PROGRAM, {'delta': delta * (10 if self.enc_midi_prg_decade else 1)})
+          self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_PROGRAM_DELTA, {'delta': delta * (10 if self.enc_midi_prg_decade else 1)})
 
         # All notes off of MIDI-IN player channel
         if enc_button == True:
           ch = self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_GET_MIDI_IN_CHANNEL)
-          self.message_center.phone_message(self, self.message_center.MSGID_MSGID_MIDI_ALL_NOTES_OFF, {'channel': ch})
+          self.message_center.phone_message(self, self.message_center.MSGID_MIDI_ALL_NOTES_OFF, {'channel': ch})
 
       # Select parameter to edit
       elif enc_menu == self.ENC_MIDI_PARAMETER:
@@ -5090,11 +5241,11 @@ class device_8encoder_class(message_center_class):
         if delta != 0: 
             master_volume_delta = delta * (10 if self.enc_mastervol_decade else 1)
             self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_MASTER_VOLUME_DELTA, {'delta': master_volume_delta})
-            self.message_center.send_message(self, self.message_center.MSGID_SHOW_MASTER_VOLUME_VALUE, None)
+            self.message_center.send_message(self, self.message_center.MSGID_APPLICATION_SHOW_MASTER_VOLUME_VALUE, None)
 
         # All notes off
         if enc_button:
-          self.message_center.phone_message(self, self.message_center.MSGID_MSGID_MIDI_ALL_NOTES_OFF)
+          self.message_center.phone_message(self, self.message_center.MSGID_MIDI_ALL_NOTES_OFF)
 
       ##### COMMON #####
 
@@ -5103,7 +5254,7 @@ class device_8encoder_class(message_center_class):
         if delta != 0:
           self.message_center.send_message(self, self.message_center.MSGID_APPLICATION_SCREEN_CHANGE, {'delta': delta})
           self.message_center.flush_messages()
-          self.message_center.send_message(self, self.message_center.MSGID_SWITCH_UPPER_LOWER, {'slide_switch_value': self.slide_switch_value})
+          self.message_center.send_message(self, self.message_center.MSGID_APPLICATION_SWITCH_UPPER_LOWER, {'slide_switch_value': self.slide_switch_value})
 
       ##### SEQUENCER SREEN MODE #####
 
@@ -5163,7 +5314,6 @@ class device_8encoder_class(message_center_class):
         else:
           if enc_button:
             self.message_center.phone_message(self, self.message_center.MSGID_SEQUENCER_PUT_NOTE_ON_CURSOR)
-#            self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_DRAW_TRACK, {'track': DRAW_TRACK_NO 0 or 1})
             self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_DRAW_TRACK)
 
       # Select sequencer parameter to edit
@@ -5340,13 +5490,14 @@ class device_8encoder_class(message_center_class):
 def loop():
   M5.update()
 
-  # Player mode
-  if midi_obj.midi_in_out():
-    application.message_center.phone_message(application, application.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in', 'value': '*'})
-  else:
-    application.message_center.phone_message(application, application.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in', 'value': ''})
+  # Receive MIDI-IN and send data to the synthesizer and MIDI-OUT
+  received = midi_obj.midi_in_out()
+  application.message_center.phone_message(application, application.message_center.MSGID_APPLICATION_FLUSH_MIDI_IN_SIGN, {'midi_in': received})
 
+  # Scan device status and take actions
   device_manager.device_control()
+
+  # Message delivery
   message_center.deliver_message()
 
 
@@ -5366,8 +5517,7 @@ if __name__ == '__main__':
     message_center = message_center_class()
     device_8encoder = device_8encoder_class(device_manager, message_center)
 
-    # Synthesizer object
-#    midi_obj = midi_class(MIDIUnit(1, port=(13, 14)), sdcard_obj)
+    # Generate a MIDI object with a Unit-MIDI synthesizer object
     midi_obj = midi_message_class(MIDIUnit(1, port=(13, 14)), sdcard_obj, message_center)
     midi_obj.setup()
 
@@ -5387,12 +5537,13 @@ if __name__ == '__main__':
     sequencer_obj.message_center.phone_message(sequencer_obj, sequencer_obj.message_center.MSGID_SEQUENCER_SETUP, None)
 
     # Application object
-    application = unit5c2_synth_application_class(midi_obj, smf_player_obj, midi_in_player_obj, sequencer_obj, message_center)
+    application = unit5c2_synth_application_class(message_center)
 
-    application.message_center.phone_message(application, application.message_center.MSGID_SETUP_PLAYER_SCREEN, None)
+    application.message_center.phone_message(application, application.message_center.MSGID_APPLICATION_SETUP_PLAYER_SCREEN, None)
     application.message_center.flush_messages()
     application.message_center.phone_message(application, application.message_center.MSGID_SMF_PLAYER_MAKE_SMF_CATALOG)
 
+    # Run the application
     while True:
       loop()
 
