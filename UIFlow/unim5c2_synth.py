@@ -670,8 +670,8 @@ class sdcard_class:
 class midi_class:
   # Constructor
   def __init__(self, synthesizer_obj, sdcard_obj):
-    self.shynth = synthesizer_obj
-    self.midi_uart = self.shynth._uart
+    self.synth = synthesizer_obj
+    self.midi_uart = self.synth._uart
     self.sdcard_obj = sdcard_obj
     self.master_volume = 127
     self.key_trans = 0
@@ -694,7 +694,7 @@ class midi_class:
 
   # Native synthesize object
   def synthesizer_obj(self):
-    return self.shynth
+    return self.synth
 
   # Native UART object
   def uart_obj(self):
@@ -764,7 +764,7 @@ class midi_class:
   # Master volume
   def set_master_volume(self, vol):
     self.master_volume = vol
-    self.shynth.set_master_volume(vol)
+    self.synth.set_master_volume(vol)
 
   # Get master volume
   def get_master_volume(self):
@@ -772,15 +772,15 @@ class midi_class:
 
   # Set instrument
   def set_instrument(self, gmbank, channel, prog):
-    self.shynth.set_instrument(gmbank, int(channel), int(prog))
+    self.synth.set_instrument(gmbank, int(channel), int(prog))
 
   # Note on
   def set_note_on(self, channel, note_key, velosity, transpose = False):
-    self.shynth.set_note_on(channel, note_key + (self.key_trans if transpose else 0), velosity)
+    self.synth.set_note_on(channel, note_key + (self.key_trans if transpose else 0), velosity)
   
   # Note off
   def set_note_off(self, channel, note_key, transpose = False):
-    self.shynth.set_note_off(channel, note_key + (self.key_trans if transpose else 0))
+    self.synth.set_note_off(channel, note_key + (self.key_trans if transpose else 0))
 
   # Notes off
   def notes_off(self, channel, note_keys, transpose = False):
@@ -793,19 +793,19 @@ class midi_class:
       for ch in range(16):
         self.set_all_notes_off(ch)
     else:
-      self.shynth.set_all_notes_off(channel)
+      self.synth.set_all_notes_off(channel)
 
   # Reverb
   def set_reverb(self, channel, prog, level, feedback):
-    self.shynth.set_reverb(channel, prog, level, feedback)
+    self.synth.set_reverb(channel, prog, level, feedback)
 
   # Chorus
   def set_chorus(self, channel, prog, level, feedback, delay):
-    self.shynth.set_chorus(channel, prog, level, feedback, delay)
+    self.synth.set_chorus(channel, prog, level, feedback, delay)
 
   # Vibrate
   def set_vibrate(self, channel, rate, depth, delay):
-    self.shynth.set_vibrate(channel, rate, depth, delay)
+    self.synth.set_vibrate(channel, rate, depth, delay)
 
 ################# End of MIDI Class Definition #################
 
