@@ -40,6 +40,8 @@
 #            unim5c2_synth.py
 #              1.0.0: 10/23/2024
 #                       Source code improvement.  Use classes to ensure independency between modules.
+#              1.1.0: 11/06/2024
+#                       Realtime MIDI-IN recording to sequencer data.
 #
 # Copyright (C) Shunsuke Ohira, 2024
 #####################################################################################################
@@ -318,6 +320,7 @@ class message_definitions():
     self.MSGID_SEQUENCER_GET_SIGNS_CURSOR = 455
     self.MSGID_SEQUENCER_CHANGE_REPEAT_SIGNS = 456
     self.MSGID_SEQUENCER_SET_GET_EDIT_TRACK = 457
+    self.MSGID_SEQUENCER_IS_MENU_PARM_RECORD = 458
     self.VIEW_DISPLAY_CLEAR = 499
 
     self.VIEW_SMF_PLAYER_SETUP = 2001
@@ -381,6 +384,7 @@ class message_definitions():
     self.VIEW_SEQUENCER_DRAW_KEYBOARD = 4122
     self.VIEW_SEQUENCER_SCREEN_VISIBILITY = 4123
     self.VIEW_SEQUENCER_ACTIVATED = 4124
+    self.VIEW_SEQUENCER_RECORD_MODE = 4125
 
     self.MSGID_DEVICE_PHONE_SEQ_TURN_OFF_PLAY_BUTTON = 10001
     self.MSGID_DEVICE_PHONE_SEQ_GET_PAUSE_STOP_BUTTON = 10002
@@ -1734,11 +1738,12 @@ class sequencer_class():
     self.SEQUENCER_PARM_TEMPO = 13                         # Change tempo to play sequencer
     self.SEQUENCER_PARM_MINIMUM_NOTE = 14                  # Change minimum note length
     self.SEQUENCER_PARM_REPEAT = 15                        # Set repeat signs (NONE/LOOP/SKIP/REPEAT)
-    self.seq_parm = self.SEQUENCER_PARM_CHANNEL                 # Current sequencer parameter index (= initial)
+    self.SEQUENCER_PARM_RECORD = 16                        # MIDI note-on/off recording mode
+    self.seq_parm = self.SEQUENCER_PARM_CHANNEL            # Current sequencer parameter index (= initial)
 
     # Sequencer parameter
     #   Sequencer parameter strings to show
-    self.seq_parameter_names = ['MDCH', 'MDPG', 'CHVL', 'TIME', 'STR1', 'STRA', 'VELO', 'NBAR', 'RESL', 'CLR1', 'CLRA', 'PLYS', 'PLYE', 'TMP', 'MIN', 'REPT']
+    self.seq_parameter_names = ['MDCH', 'MDPG', 'CHVL', 'TIME', 'STR1', 'STRA', 'VELO', 'NBAR', 'RESL', 'CLR1', 'CLRA', 'PLYS', 'PLYE', 'TMP', 'MIN', 'REPT','RECD']
     self.seq_total_parameters = len(self.seq_parameter_names)   # Number of seq_parm
 
     # Editor/Player settings
@@ -1766,6 +1771,14 @@ class sequencer_class():
 
     # Sequencer file path
     self.SEQUENCER_FILE_PATH = '/sd//SYNTH/SEQFILE/'
+
+    # MIDI-IN recording data
+    self.midi_recording = False
+    self.midi_buffer = bytearray(0)
+    self.note_event = None
+    self.note_key = None
+    self.midi_event_time = 0
+    self.recorded_notes = {}
 
   # Set delegation class for graphics
   def delegate_graphics(self, view_delegate_obj):
@@ -2367,13 +2380,90 @@ class sequencer_class():
         func_post_move_cursor()
       return tc
 
+    # Get MIDI-IN and send data to MIDI-OUT, and record it if in recording mode
+    def midi_in_out_with_recording(time_cursor):
+      # Get MIDI-IN and send data to Unit-MIDI, recording note-on/off event
+      if self.midi_recording:
+        # MIDI-IN data exist
+        midi_data = self.midi_obj.midi_in()
+        if not midi_data is None:
+          self.midi_obj.midi_out(midi_data)
+#          print('MIDI-IN>:', self.midi_buffer, midi_data)
+          self.midi_buffer.extend(midi_data)
+#          print('MIDI-IN<:', self.midi_buffer)
+          if self.note_event is None:
+            self.midi_event_time = time_cursor
+
+        # MIDI data were interrupted and Buffer data exist
+        elif len(self.midi_buffer) > 0:
+#          print('PARSE MIDI-IN:', self.midi_buffer)
+          for mdt in self.midi_buffer:
+            # Note-on/off
+            evt = mdt & 0xf0
+            if self.note_event is None:
+              if evt == 0x90 or evt == 0x80:
+                self.note_event = evt
+                self.note_key = None
+            else:
+              # Key
+              if self.note_key is None:
+                self.note_key = mdt
+              # Velosity
+              else:
+                # Note-off
+                if mdt == 0x00 or self.note_event == 0x80:
+#                  print('NOTE-OFF:', self.midi_event_time, int(self.note_key))
+                  if self.note_key in self.recorded_notes:
+                    for tmon in self.recorded_notes[self.note_key].keys():
+                      if self.recorded_notes[self.note_key][tmon]['off'] is None:
+                        self.recorded_notes[self.note_key][tmon]['off'] = self.midi_event_time
+#                        print('ADD NOTE-ON/OFF:', self.recorded_notes[self.note_key])
+                        self.sequencer_draw_note(self.edit_track(), int(self.note_key), tmon, self.midi_event_time, self.SEQ_NOTE_DISP_HIGHLIGHT)
+                        break
+
+#                    print('NOTE-OFF:', self.recorded_notes)
+
+                  else:
+                    print('IGNORE NOTE-OFF RECORING:', self.midi_event_time, int(self.note_key))
+
+                # Note-on
+                else:
+#                  print('NOTE-ON :', self.midi_event_time, int(self.note_key), int(mdt))
+                  if self.note_key in self.recorded_notes:
+                    if not self.midi_event_time in self.recorded_notes[self.note_key]:
+                      self.recorded_notes[self.note_key][self.midi_event_time] = {'velosity': int(mdt), 'off': None}
+                  else:
+                    self.recorded_notes[self.note_key] = {self.midi_event_time: {'velosity': int(mdt), 'off': None}}
+                  
+#                  print('RECORDED NOTES:', self.recorded_notes)
+
+                # Clear a note-on/off event
+                self.note_event = None
+                self.note_key = None
+
+          self.midi_buffer = bytearray(0)
+
+      # Get MIDI-IN and send data to Unit-MIDI
+      else:
+        self.midi_obj.midi_in_out()
+
+
     ##### CODE: play_sequencer
 
+    print('RECORDING MODE:', self.seq_parm)
     # Play parameter
     next_note_on = 0
     next_note_off = 0
     time_cursor = self.seq_play_time[0]
     end_time = self.seq_play_time[1] if self.seq_play_time[0] < self.seq_play_time[1] else -1
+
+    # MIDI recording data
+    self.midi_recording = self.seq_parameter_names[self.seq_parm] == 'RECD'
+    self.midi_buffer = bytearray(0)
+    self.note_event = None
+    self.note_key = None
+    self.midi_event_time = time_cursor
+    self.recorded_notes = {}
 
     # Repeat controls
     loop_play_time = 0
@@ -2386,9 +2476,14 @@ class sequencer_class():
     self.seq_control['time_cursor'] = time_cursor
     score_len = len(self.seq_score)
     play_slot = 0
-    while play_slot < score_len:
+#    while play_slot < score_len:
+    while play_slot < score_len or end_time > play_slot:
       print('SEQ POINT:', time_cursor, play_slot)
-      score = self.seq_score[play_slot]
+#      score = self.seq_score[play_slot]
+      if play_slot < score_len:
+        score = self.seq_score[play_slot]
+      else:
+        score = None
 
       # Scan stop button (PLAY-->PAUSE-->STOP)
       if not (func_pause_or_stop is None or func_pause_to_stop is None):
@@ -2404,7 +2499,12 @@ class sequencer_class():
       skip_continue = False
       repeat_continue = False
       tempo = int((60.0 / self.seq_control['tempo'] / (2**self.seq_control['mini_note']/4)) * 1000000)
-      next_notes_on = score['time']
+#      next_notes_on = score['time']
+      if score is None:
+        next_notes_on = play_slot + 1
+      else:
+        next_notes_on = score['time']
+
       while next_notes_on > time_cursor:
   #      print('SEQUENCER AT0:', time_cursor)
         time0 = time.ticks_us()
@@ -2412,9 +2512,10 @@ class sequencer_class():
           if note_off_events[0]['time'] == time_cursor:
             sequencer_notes_off()
 
-        # Get MIDI-IN and send data to Unit-MIDI
-        self.midi_obj.midi_in_out()
-        
+        # MIDI-IN and Recording and MIDI-OUT
+        midi_in_out_with_recording(time_cursor)
+
+        # Adjust timing and sleep until next slot
         time1 = time.ticks_us()
         timedelta = time.ticks_diff(time1, time0)
         time.sleep_us(tempo - timedelta)
@@ -2514,14 +2615,17 @@ class sequencer_class():
         break
 
       # Notes on
-      for note_data in score['notes']:
-        channel = note_data['channel']
-  #      print('SEQ NOTE ON:', time_cursor, note_data['note'])
-        self.midi_obj.set_note_on(channel, note_data['note'], int(note_data['velocity'] * self.seq_channel[channel]['volume'] / 100))
-        note_off_at = time_cursor + note_data['duration']
-        insert_note_off(note_off_at, channel, note_data['note'])
+      if not score is None:
+        for note_data in score['notes']:
+          channel = note_data['channel']
+    #      print('SEQ NOTE ON:', time_cursor, note_data['note'])
+          self.midi_obj.set_note_on(channel, note_data['note'], int(note_data['velocity'] * self.seq_channel[channel]['volume'] / 100))
+          note_off_at = time_cursor + note_data['duration']
+          insert_note_off(note_off_at, channel, note_data['note'])
 
-      self.midi_obj.midi_in_out()
+#      self.midi_obj.midi_in_out()
+      # MIDI-IN and Recording and MIDI-OUT
+      midi_in_out_with_recording(time_cursor)
 
       time1 = time.ticks_us()
       timedelta = time.ticks_diff(time1, time0)
@@ -2558,6 +2662,23 @@ class sequencer_class():
       time_cursor = move_play_cursor(time_cursor)
 
     print('SEQUENCER: Finished.')
+
+    # Recording data exist
+    channel = self.get_track_midi(self.edit_track())
+    for rec_key in self.recorded_notes.keys():
+      for rec_on in self.recorded_notes[rec_key].keys():
+        rec_velo = self.recorded_notes[rec_key][rec_on]['velosity']
+        rec_off  = self.recorded_notes[rec_key][rec_on]['off']
+        if rec_off is None:
+          rec_off = end_time
+
+#        print('ADD NOTE:', channel, rec_on, int(rec_key), rec_velo, rec_off - rec_on + 1)
+        self.sequencer_new_note(channel, rec_on, int(rec_key), rec_velo, rec_off - rec_on + 1)
+
+#    print('GET NOTE ON THE CURSOR:', self.seq_edit_track, self.seq_control)
+    self.seq_cursor_note = self.sequencer_find_note(self.seq_edit_track, self.seq_control['time_cursor'], self.seq_control['key_cursor'][self.seq_edit_track])
+#    print(self.seq_score)
+#    print('ADDED RECORDERD NOTES: CURSOR=', self.seq_cursor_note)
 
   # Draw a note on the sequencer
   def sequencer_draw_note(self, trknum, note_num, note_on_time, note_off_time, disp_mode):
@@ -2717,6 +2838,7 @@ class sequencer_message_class(sequencer_class):
       self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_GET_SIGNS_CURSOR, self.func_SEQUENCER_GET_SIGNS_CURSOR)
       self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_CHANGE_REPEAT_SIGNS, self.func_SEQUENCER_CHANGE_REPEAT_SIGNS)
       self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_SET_GET_EDIT_TRACK, self.func_SEQUENCER_SET_GET_EDIT_TRACK)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_IS_MENU_PARM_RECORD, self.func_SEQUENCER_IS_MENU_PARM_RECORD)
 
     else:
       self.message_center = message_center_class()
@@ -3240,6 +3362,9 @@ class sequencer_message_class(sequencer_class):
 
   def func_SEQUENCER_IS_MENU_PARM_REPEAT(self, message_data = None):
     return self.seq_parm == self.SEQUENCER_PARM_REPEAT
+
+  def func_SEQUENCER_IS_MENU_PARM_RECORD(self, message_data = None):
+    return self.seq_parm == self.SEQUENCER_PARM_RECORD
 
 ################# End of sequencer_message_class Definition #################
 
@@ -4032,6 +4157,7 @@ class view_sequencer_class(view_m5stack_core2):
       self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_DRAW_KEYBOARD, self.func_SEQUENCER_DRAW_KEYBOARD)
       self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_ACTIVATED, self.func_SEQUENCER_ACTIVATED)
       self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_SCREEN_VISIBILITY, self.func_SEQUENCER_SCREEN_VISIBILITY)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_SEQUENCER_RECORD_MODE, self.func_SEQUENCER_RECORD_MODE)
 
       self.message_center.add_subscriber(self, self.message_center.VIEW_DISPLAY_CLEAR, self.func_DISPLAY_CLEAR)
 
@@ -4139,7 +4265,7 @@ class view_sequencer_class(view_m5stack_core2):
   # Draw sequencer track
   #   trknum: The track number to draw (0 or 1)
   def sequencer_draw_track(self, trknum):
-#    print('DRAW TRACK IN SEQUENCER VIEW')
+#    print('DRAW TRACK IN SEQUENCER VIEW:', trknum)
     # Draw with velocity
     with_velocity = (self.data_obj.seq_parm == self.data_obj.SEQUENCER_PARM_VELOCITY)
 
@@ -4188,6 +4314,7 @@ class view_sequencer_class(view_m5stack_core2):
     time_e = max(time_e+1, len(self.data_obj.seq_score))
     draw_time = time_s
     for score in self.data_obj.seq_score:
+#      print('DRAW SCORE:', score, with_velocity)
       # Note on/off(max) time
       note_on_time  = score['time']
       note_off_time = score['time'] + score['max_duration']
@@ -4205,13 +4332,18 @@ class view_sequencer_class(view_m5stack_core2):
 
         # Note on time is the draw time
         for notes_data in score['notes']:
+#          print('DRAW NOTES0:', draw_time, notes_data)
           if notes_data['channel'] == channel:
+#            print('DRAW A NOTE0:', notes_data['channel'], channel, self.data_obj.seq_cursor_note)
             if self.data_obj.seq_cursor_note is None:
               color = self.data_obj.SEQ_NOTE_DISP_NORMAL
             else:
               color = self.data_obj.SEQ_NOTE_DISP_HIGHLIGHT if score == self.data_obj.seq_cursor_note[0] and notes_data == self.data_obj.seq_cursor_note[1] else self.data_obj.SEQ_NOTE_DISP_NORMAL
 
+#            print('-->DRAW NOTE0')
             self.data_obj.sequencer_draw_note(trknum, notes_data['note'], note_on_time, note_on_time + notes_data['duration'], color)
+
+#          print('<--DRAW A NOTE0')
 
         if with_velocity:
           self.data_obj.sequencer_draw_velocity(trknum, channel, note_on_time, score['notes'])
@@ -4219,13 +4351,18 @@ class view_sequencer_class(view_m5stack_core2):
       # Note on time is less than draw time but note is in display area
       else:
         for notes_data in score['notes']:
+#          print('DRAW NOTES1:', draw_time, notes_data)
           if notes_data['channel'] == channel:
+#            print('DRAW A NOTE1:', notes_data['channel'], channel, self.data_obj.seq_cursor_note)
             if self.data_obj.seq_cursor_note is None:
               color = self.data_obj.SEQ_NOTE_DISP_NORMAL
             else:
               color = self.data_obj.SEQ_NOTE_DISP_HIGHLIGHT if score == self.data_obj.seq_cursor_note[0] and notes_data == self.data_obj.seq_cursor_note[1] else self.data_obj.SEQ_NOTE_DISP_NORMAL
 
+#            print('-->DRAW NOTE1')
             self.data_obj.sequencer_draw_note(trknum, notes_data['note'], note_on_time, note_on_time + notes_data['duration'], color)
+
+#          print('<--DRAW A NOTE1')
 
         if with_velocity:
           self.data_obj.sequencer_draw_velocity(trknum, channel, note_on_time, score['notes'])
@@ -4366,6 +4503,10 @@ class view_sequencer_class(view_m5stack_core2):
       self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_program1', 'value': prg})
     elif self.data_obj.get_track_midi(1) == current_ch:
       self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_program2', 'value': prg})
+
+  def func_SEQUENCER_RECORD_MODE(self, message_data = None):
+    print('func_SEQUENCER_RECORD_MODE')
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_parm_value', 'value': ''})
 
   def func_SEQUENCER_REPEAT_SIGN_SET_TEXT(self, message_data = None):
     if not message_data is None:
@@ -5480,6 +5621,11 @@ class device_8encoder_class(message_center_class):
               self.message_center.phone_message(self, self.message_center.MSGID_SEQUENCER_CHANGE_REPEAT_SIGNS, {'time': rept_cursor, 'delta': delta})
               self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_REPEAT_SIGN_SET_TEXT, {'time': rept_cursor})
               self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_DRAW_TRACK)
+
+          # MIDI note-on/off recording mode
+          elif self.message_center.phone_message(self, self.message_center.MSGID_SEQUENCER_IS_MENU_PARM_RECORD):
+              self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_RECORD_MODE)
+            
 
 ################# End of 8Encoder Device Class Definition #################
 
