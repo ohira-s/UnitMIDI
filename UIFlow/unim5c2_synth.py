@@ -42,6 +42,10 @@
 #                       Source code improvement.  Use classes to ensure independency between modules.
 #              1.1.0: 11/06/2024
 #                       Realtime MIDI-IN recording to sequencer data.
+#              1.1.1: 11/07/2024
+#                       MIDI-IN channel override in the sequencer mode.
+#                       Note input by MIDI-IN in the sequencer edit mode.
+#                       DRUM SET is available in MIDI channel 10 (program internal value is 9).
 #
 # Copyright (C) Shunsuke Ohira, 2024
 #####################################################################################################
@@ -57,7 +61,7 @@
 #   and send the received raw data to Unit-MIDI synthesizer.
 #
 # SEQUENCER (Screen Mode: SEQUENCER)
-#   Step sequencer to compose music.
+#   Step sequencer and real time MIDI-IN recording to compose music.
 #   Play it with both Unit-MIDI synthesizer and instruments via MIDI-OUT.
 #====================================================================================================
 # Operation
@@ -136,6 +140,7 @@
 #   8encoder.CH1
 #     VALUE : Select a sequencer data file.
 #     BUTTON: Play or Stop sequencer score. (toggle)
+#             Play and Record in RECD mode.
 #
 #   8encoder.CH2
 #     VALUE : Control the sequencer file. (LOAD/SAVE)
@@ -321,6 +326,7 @@ class message_definitions():
     self.MSGID_SEQUENCER_CHANGE_REPEAT_SIGNS = 456
     self.MSGID_SEQUENCER_SET_GET_EDIT_TRACK = 457
     self.MSGID_SEQUENCER_IS_MENU_PARM_RECORD = 458
+    self.MSGID_SEQUENCER_PUT_NOTE_BY_MIDI_IN = 459
     self.VIEW_DISPLAY_CLEAR = 499
 
     self.VIEW_SMF_PLAYER_SETUP = 2001
@@ -750,10 +756,23 @@ class midi_class:
 
   # MIDI IN --> OUT
   # Receive MIDI IN data (UART), then send it to MIDI OUT (UART)
-  def midi_in_out(self):
+  def midi_in_out(self, channel_override = None):
     midi_bytes = self.midi_in()
     if not midi_bytes is None:
-      self.midi_out(midi_bytes)
+      if channel_override is None:
+        self.midi_out(midi_bytes)
+
+      else:
+        midi_out_data = bytearray(0)
+        for mdt in midi_bytes:
+          evt = mdt & 0xf0
+          if 0x80 <= evt and evt <= 0xE0:
+            midi_out_data.extend((evt | channel_override).to_bytes(1,'little'))
+          else:
+            midi_out_data.extend((mdt).to_bytes(1,'little'))
+
+        self.midi_out(midi_out_data)
+
       return True
 
     return False
@@ -2304,6 +2323,71 @@ class sequencer_class():
         if flg == False:
           self.seq_score_sign.remove(sign_data)
 
+  # Watch MIDI-IN then send data to MIDI-OUT and put notes on the current cursor
+  def midi_in_out_and_put_notes(self):
+    # Get MIDI-IN and send data to MIDI-OUT as the current track MIDI channel
+    received = False
+    added_notes = 0
+    time_cursor = self.seq_control['time_cursor']
+    trk_channel = self.get_track_midi()
+    in_buffer = bytearray(0)
+    midi_data = self.midi_obj.midi_in()
+    while not midi_data is None:
+      # MIDI-OUT as the current channel
+      received = True
+      midi_out_data = bytearray(0)
+      for mdt in midi_data:
+        evt = mdt & 0xF0
+        if 0x80 <= evt and evt <= 0xE0:
+          midi_out_data.extend((evt | trk_channel).to_bytes(1, 'little'))
+        else:
+          midi_out_data.extend(mdt.to_bytes(1, 'little'))
+
+      # MIDI-OUT
+      self.midi_obj.midi_out(midi_out_data)
+
+      # Buffering in recording mode
+      if self.seq_parameter_names[self.seq_parm] == 'RECD':
+        in_buffer.extend(midi_data)
+      
+      # Next MIDI-IN
+      midi_data = self.midi_obj.midi_in()
+
+    # Get note-on events
+    note_on_flg = False
+    note_on_key = None
+    if len(in_buffer) > 0:
+      for mdt in in_buffer:
+        # Velosity
+        if not note_on_key is None:
+          # Add a note
+          if self.sequencer_find_note(self.seq_edit_track, time_cursor, int(note_on_key)) is None:
+            self.sequencer_new_note(trk_channel, time_cursor, int(note_on_key), int(mdt))
+            added_notes = added_notes + 1
+          else:
+            print('CANCEL DUPLICATED NOTE:', note_on_key)
+            
+          note_on_flg = False
+          note_on_key = None
+
+        # Key
+        elif note_on_flg:
+          note_on_key = mdt
+
+        # Note-on
+        else:
+          evt = mdt & 0xF0
+          if evt == 0x90:
+            note_on_flg = True
+            note_on_key = None
+
+    # New note exsits
+    if added_notes > 0:
+      self.seq_cursor_note = self.sequencer_find_note(self.seq_edit_track, self.seq_control['time_cursor'], self.seq_control['key_cursor'][self.seq_edit_track])
+      self.sequencer_draw_track(self.seq_edit_track)
+
+    return received
+
   # Backup the cursor position
   def pre_play_sequencer(self):
     self.time_cursor_bk = self.seq_control['time_cursor']
@@ -2383,20 +2467,42 @@ class sequencer_class():
     # Get MIDI-IN and send data to MIDI-OUT, and record it if in recording mode
     def midi_in_out_with_recording(time_cursor):
       # Get MIDI-IN and send data to Unit-MIDI, recording note-on/off event
+      trk_channel = self.get_track_midi()
+
+      # Get MIDI-IN and send data to MIDI-OUT as the current track MIDI channel
+      midi_data = self.midi_obj.midi_in()
+      if not midi_data is None:
+        # MIDI-OUT as the current channel
+        midi_out_data = bytearray(0)
+        for mdt in midi_data:
+          evt = mdt & 0xf0
+          if 0x80 <= evt and evt <= 0xE0:
+            midi_out_data.extend((evt | trk_channel).to_bytes(1, 'little'))
+          else:
+            midi_out_data.extend(mdt.to_bytes(1, 'little'))
+
+        # MIDI-OUT
+        self.midi_obj.midi_out(midi_out_data)
+
+      # Recording mode
       if self.midi_recording:
+        # Draw notes inputing
+        for nt_key in self.recorded_notes.keys():
+          for tmon in self.recorded_notes[nt_key].keys():
+            if self.recorded_notes[nt_key][tmon]['off'] is None:
+              self.sequencer_draw_note(self.edit_track(), int(nt_key), tmon, time_cursor, self.SEQ_NOTE_DISP_HIGHLIGHT)
+
         # MIDI-IN data exist
-        midi_data = self.midi_obj.midi_in()
         if not midi_data is None:
-          self.midi_obj.midi_out(midi_data)
-#          print('MIDI-IN>:', self.midi_buffer, midi_data)
+          # MIDI-IN data buffering
           self.midi_buffer.extend(midi_data)
-#          print('MIDI-IN<:', self.midi_buffer)
+
+          # Move next MIDI event time to the current time cursor
           if self.note_event is None:
             self.midi_event_time = time_cursor
 
         # MIDI data were interrupted and Buffer data exist
         elif len(self.midi_buffer) > 0:
-#          print('PARSE MIDI-IN:', self.midi_buffer)
           for mdt in self.midi_buffer:
             # Note-on/off
             evt = mdt & 0xf0
@@ -2408,34 +2514,29 @@ class sequencer_class():
               # Key
               if self.note_key is None:
                 self.note_key = mdt
-              # Velosity
+              # Velosity (end of a note-on/off event)
               else:
                 # Note-off
                 if mdt == 0x00 or self.note_event == 0x80:
-#                  print('NOTE-OFF:', self.midi_event_time, int(self.note_key))
                   if self.note_key in self.recorded_notes:
                     for tmon in self.recorded_notes[self.note_key].keys():
                       if self.recorded_notes[self.note_key][tmon]['off'] is None:
                         self.recorded_notes[self.note_key][tmon]['off'] = self.midi_event_time
-#                        print('ADD NOTE-ON/OFF:', self.recorded_notes[self.note_key])
-                        self.sequencer_draw_note(self.edit_track(), int(self.note_key), tmon, self.midi_event_time, self.SEQ_NOTE_DISP_HIGHLIGHT)
+                        self.sequencer_draw_note(self.edit_track(), int(self.note_key), tmon, self.midi_event_time + 1, self.SEQ_NOTE_DISP_HIGHLIGHT)
                         break
-
-#                    print('NOTE-OFF:', self.recorded_notes)
 
                   else:
                     print('IGNORE NOTE-OFF RECORING:', self.midi_event_time, int(self.note_key))
 
                 # Note-on
                 else:
-#                  print('NOTE-ON :', self.midi_event_time, int(self.note_key), int(mdt))
                   if self.note_key in self.recorded_notes:
                     if not self.midi_event_time in self.recorded_notes[self.note_key]:
                       self.recorded_notes[self.note_key][self.midi_event_time] = {'velosity': int(mdt), 'off': None}
                   else:
                     self.recorded_notes[self.note_key] = {self.midi_event_time: {'velosity': int(mdt), 'off': None}}
-                  
-#                  print('RECORDED NOTES:', self.recorded_notes)
+
+                  self.sequencer_draw_note(self.edit_track(), int(self.note_key), self.midi_event_time, self.midi_event_time + 1, self.SEQ_NOTE_DISP_HIGHLIGHT)
 
                 # Clear a note-on/off event
                 self.note_event = None
@@ -2443,14 +2544,9 @@ class sequencer_class():
 
           self.midi_buffer = bytearray(0)
 
-      # Get MIDI-IN and send data to Unit-MIDI
-      else:
-        self.midi_obj.midi_in_out()
-
-
     ##### CODE: play_sequencer
 
-    print('RECORDING MODE:', self.seq_parm)
+#    print('RECORDING MODE:', self.seq_parm)
     # Play parameter
     next_note_on = 0
     next_note_off = 0
@@ -2476,10 +2572,8 @@ class sequencer_class():
     self.seq_control['time_cursor'] = time_cursor
     score_len = len(self.seq_score)
     play_slot = 0
-#    while play_slot < score_len:
-    while play_slot < score_len or end_time > play_slot:
-      print('SEQ POINT:', time_cursor, play_slot)
-#      score = self.seq_score[play_slot]
+    while play_slot < score_len or end_time > play_slot or (self.midi_recording and end_time == -1):
+#      print('SEQ POINT:', time_cursor, play_slot)
       if play_slot < score_len:
         score = self.seq_score[play_slot]
       else:
@@ -2499,7 +2593,6 @@ class sequencer_class():
       skip_continue = False
       repeat_continue = False
       tempo = int((60.0 / self.seq_control['tempo'] / (2**self.seq_control['mini_note']/4)) * 1000000)
-#      next_notes_on = score['time']
       if score is None:
         next_notes_on = play_slot + 1
       else:
@@ -2516,9 +2609,18 @@ class sequencer_class():
         midi_in_out_with_recording(time_cursor)
 
         # Adjust timing and sleep until next slot
+#        time1 = time.ticks_us()
+#        timedelta = time.ticks_diff(time1, time0)
+#        time.sleep_us(tempo - timedelta)
+#        time_cursor = move_play_cursor(time_cursor)
+
         time1 = time.ticks_us()
         timedelta = time.ticks_diff(time1, time0)
-        time.sleep_us(tempo - timedelta)
+        while tempo - timedelta > 0:
+          midi_in_out_with_recording(time_cursor)
+          time1 = time.ticks_us()
+          timedelta = time.ticks_diff(time1, time0)
+
         time_cursor = move_play_cursor(time_cursor)
 
         # Loop/Skip/Repeat
@@ -2623,15 +2725,23 @@ class sequencer_class():
           note_off_at = time_cursor + note_data['duration']
           insert_note_off(note_off_at, channel, note_data['note'])
 
-#      self.midi_obj.midi_in_out()
       # MIDI-IN and Recording and MIDI-OUT
       midi_in_out_with_recording(time_cursor)
 
+#      time1 = time.ticks_us()
+#      timedelta = time.ticks_diff(time1, time0)
+#      time.sleep_us(tempo - timedelta)
+
       time1 = time.ticks_us()
       timedelta = time.ticks_diff(time1, time0)
-      time.sleep_us(tempo - timedelta)
+      while tempo - timedelta > 0:
+        midi_in_out_with_recording(time_cursor)
+        time1 = time.ticks_us()
+        timedelta = time.ticks_diff(time1, time0)
 
       time_cursor = move_play_cursor(time_cursor)
+
+#      time_cursor = move_play_cursor(time_cursor)
 
       if end_time != -1 and time_cursor >= end_time:
         break
@@ -2641,6 +2751,7 @@ class sequencer_class():
 
     # Notes off (final process)
     print('SEQUENCER: Notes off process =', len(note_off_events))
+    trk_channel = self.get_track_midi()
     while len(note_off_events) > 0:
       score = note_off_events[0]
       timedelta = 0
@@ -2654,7 +2765,7 @@ class sequencer_class():
 
       time0 = time.ticks_us()
       sequencer_notes_off()
-      self.midi_obj.midi_in_out()
+      self.midi_obj.midi_in_out(trk_channel)
 
       time1 = time.ticks_us()
       timedelta = time.ticks_diff(time1, time0)
@@ -2839,6 +2950,7 @@ class sequencer_message_class(sequencer_class):
       self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_CHANGE_REPEAT_SIGNS, self.func_SEQUENCER_CHANGE_REPEAT_SIGNS)
       self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_SET_GET_EDIT_TRACK, self.func_SEQUENCER_SET_GET_EDIT_TRACK)
       self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_IS_MENU_PARM_RECORD, self.func_SEQUENCER_IS_MENU_PARM_RECORD)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_PUT_NOTE_BY_MIDI_IN, self.func_SEQUENCER_PUT_NOTE_BY_MIDI_IN)
 
     else:
       self.message_center = message_center_class()
@@ -2875,12 +2987,20 @@ class sequencer_message_class(sequencer_class):
     self.message_center.phone_message(self, self.message_center.MSGID_APPLICATION_SHOW_MASTER_VOLUME_VALUE, None)
 
     ch = self.seq_track_midi[0]
-    prg = self.message_center.phone_message(self, self.message_center.MSGID_MIDI_GET_PROGRAM_NAME, {'gm_bank': self.seq_control['gmbank'][ch], 'program_number': self.seq_control['program'][ch]})
+    if ch == 9:
+      prg = 'DRUM SET'
+    else:
+      prg = self.message_center.phone_message(self, self.message_center.MSGID_MIDI_GET_PROGRAM_NAME, {'gm_bank': self.seq_control['gmbank'][ch], 'program_number': self.seq_control['program'][ch]})
+
     prg = prg[:9]
     self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_program1', 'value': prg})
 
     ch = self.seq_track_midi[1]
-    prg = self.message_center.phone_message(self, self.message_center.MSGID_MIDI_GET_PROGRAM_NAME, {'gm_bank': self.seq_control['gmbank'][ch], 'program_number': self.seq_control['program'][ch]})
+    if ch == 9:
+      prg = 'DRUM SET'
+    else:
+      prg = self.message_center.phone_message(self, self.message_center.MSGID_MIDI_GET_PROGRAM_NAME, {'gm_bank': self.seq_control['gmbank'][ch], 'program_number': self.seq_control['program'][ch]})
+
     prg = prg[:9]
     self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_program2', 'value': prg})
     
@@ -2980,7 +3100,11 @@ class sequencer_message_class(sequencer_class):
 
     for trk in range(2):
       ch = self.seq_track_midi[trk]
-      prg = self.message_center.phone_message(self, self.message_center.MSGID_MIDI_GET_PROGRAM_NAME, {'gm_bank': self.seq_control['gmbank'][ch], 'program_number': self.seq_control['program'][ch]})
+      if ch == 9:
+        prg = 'DRUM SET'
+      else:
+        prg = self.message_center.phone_message(self, self.message_center.MSGID_MIDI_GET_PROGRAM_NAME, {'gm_bank': self.seq_control['gmbank'][ch], 'program_number': self.seq_control['program'][ch]})
+
       prg = prg[:9]
       if trk == 0:
         self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_program1', 'value': prg})
@@ -2989,7 +3113,11 @@ class sequencer_message_class(sequencer_class):
 
   def func_SEQUENCER_MIDI_CHANNEL_CHANGED(self, message_data = None):
     channel = self.seq_track_midi[self.seq_edit_track]
-    prg = self.message_center.phone_message(self, self.message_center.MSGID_MIDI_GET_PROGRAM_NAME, {'gm_bank': self.seq_control['gmbank'][channel], 'program_number': self.seq_control['program'][channel]})
+    if channel == 9:
+      prg = 'DRUM SET'
+    else:
+      prg = self.message_center.phone_message(self, self.message_center.MSGID_MIDI_GET_PROGRAM_NAME, {'gm_bank': self.seq_control['gmbank'][channel], 'program_number': self.seq_control['program'][channel]})
+
     prg = prg[:9]
 
     if   self.seq_edit_track == 0:
@@ -3315,6 +3443,9 @@ class sequencer_message_class(sequencer_class):
     self.edit_track(trknum)
     return trknum
 
+  def func_SEQUENCER_PUT_NOTE_BY_MIDI_IN(self, message_data = None):
+    return self.midi_in_out_and_put_notes()
+
   def func_SEQUENCER_IS_MENU_PARM_CHANNEL(self, message_data = None):
     return self.seq_parm == self.SEQUENCER_PARM_CHANNEL
 
@@ -3633,7 +3764,11 @@ class midi_in_player_message_class(midi_in_player_class):
     self.set_midi_in_program(dlt)
     channel = self.midi_in_channel()
     midi_in_program = self.midi_in_settings[channel]['program']
-    prg = self.message_center.phone_message(self, self.message_center.MSGID_MIDI_GET_PROGRAM_NAME, {'gm_bank': self.midi_in_settings[channel]['gmbank'], 'program_number': midi_in_program})
+    if channel == 9:
+      prg = 'DRUM SET'
+    else:
+      prg = self.message_center.phone_message(self, self.message_center.MSGID_MIDI_GET_PROGRAM_NAME, {'gm_bank': self.midi_in_settings[channel]['gmbank'], 'program_number': midi_in_program})
+
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PROGRAM_SET_TEXT, {'value': midi_in_program})
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_program_name', 'value': prg})
 
@@ -4008,32 +4143,33 @@ class view_midi_in_player_class(view_m5stack_core2):
     self.add_label('title_midi_in_params', 0, 120, 1.0, 0xff8080, 0x222222, Widgets.FONTS.DejaVu18)
 
     # Data labels
+    self.add_label('label_midi_in', 165, 100, 1.0, 0x00ffcc, 0x222222, Widgets.FONTS.DejaVu18)
+    self.add_label('label_midi_parm_title', 204, 100, 1.0, 0x00ccff, 0x222222, Widgets.FONTS.DejaVu18)
     self.add_label('label_midi_in_set', 0, 140, 1.0, 0x00ffcc, 0x222222, Widgets.FONTS.DejaVu18)
     self.add_label('label_midi_in_set_ctrl', 46, 140, 1.0, 0x00ffcc, 0x222222, Widgets.FONTS.DejaVu18)
-    self.add_label('label_midi_in', 165, 100, 1.0, 0x00ffcc, 0x222222, Widgets.FONTS.DejaVu18)
     self.add_label('label_channel', 108, 140, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
     self.add_label('label_program', 159, 140, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
-    self.add_label('label_program_name', 0, 160, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
     self.add_label('label_midi_parameter', 204, 140, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
     self.add_label('label_midi_parm_value', 264, 140, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
-    self.add_label('label_midi_parm_title', 204, 100, 1.0, 0x00ccff, 0x222222, Widgets.FONTS.DejaVu18)
+    self.add_label('label_program_name', 0, 160, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
 
   def func_MIDI_IN_PLAYER_INITIAL_DISPLAY(self, message_data):
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'title_midi_in', 'value': 'MIDI-IN PLAYER'})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in', 'value': '*'})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_in', 'visible': False})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARM_TITLE_SET_TEXT)
+
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'title_midi_in_params', 'value': 'NO. FIL  MCH PROG PARM VAL'})
+
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_SET_TEXT)
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in_set_ctrl', 'value': message_data['file_op']})
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARM_TITLE_SET_TEXT)
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_CHANNEL_SET_TEXT, {'value': self.data_obj.midi_in_channel()})
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PROGRAM_SET_TEXT)
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARAMETER_SET_TEXT)
 
-    midi_in_settings = self.data_obj.get_midi_in_setting()
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_parm_value', 'format': '{:03d}', 'value': midi_in_settings[self.data_obj.midi_in_channel()]['reverb'][0]})
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_PARM_VALUE_SET_TEXT)
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_COLOR, {'label': 'label_midi_parameter', 'fore': 0x00ffcc, 'back': 0x222222})
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_COLOR, {'label': 'label_midi_parm_value', 'fore': 0xffffff, 'back': 0x222222})
-
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in', 'value': '*'})
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_VISIBLE, {'label': 'label_midi_in', 'visible': False})
 
   def func_MIDI_IN_PLAYER_ACTIVATED(self, message_data):
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_COLOR, {'label': 'title_midi_in_params', 'fore': 0xff4040, 'back': 0x555555})
@@ -4061,15 +4197,15 @@ class view_midi_in_player_class(view_m5stack_core2):
       message_data = {'value': 0}
 
     message_data['label'] = 'label_channel'
-    message_data['format'] = '{:0>2d}'
+    message_data['format'] = '{:02d}'
     return self.label_setText(message_data)
 
-  def func_MIDI_IN_PLAYER_PROGRAM_SET_TEXT(self, message_data):
+  def func_MIDI_IN_PLAYER_PROGRAM_SET_TEXT(self, message_data = None):
     if message_data is None:
-      message_data = {'value': 999}
+      message_data = {'value': 0}
 
     message_data['label'] = 'label_program'
-    message_data['format'] = '{:0>3d}'
+    message_data['format'] = '{:03d}'
     return self.label_setText(message_data)
 
   def func_MIDI_IN_PLAYER_PARAMETER_SET_TEXT(self, message_data = None):
@@ -4499,6 +4635,9 @@ class view_sequencer_class(view_m5stack_core2):
   def func_SEQUENCER_PROGRAM_SET_TEXT(self, message_data = None):
     prg = message_data['value']
     current_ch = self.data_obj.get_track_midi()
+    if current_ch == 9:
+      prg = 'DRUM SET'
+
     if self.data_obj.get_track_midi(0) == current_ch:
       self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_program1', 'value': prg})
     elif self.data_obj.get_track_midi(1) == current_ch:
@@ -4869,6 +5008,19 @@ class unit5c2_synth_application_class(message_center_class):
     self.message_center.phone_message(self, self.message_center.MSGID_SMF_PLAYER_CHANGE_VOLUME, {'delta': 0})    
     self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_TEMPO_SET_TEXT)
 
+    # Prepare SYNTH data and all notes off
+    self.message_center.phone_message(self, self.message_center.MSGID_MIDI_ALL_NOTES_OFF)
+
+    # GUI for MIDI-IN Player draw
+    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_INITIAL_DISPLAY, {'file_op': self.enc_midi_set_ctrl_list[self.enc_midi_set_ctrl]})
+
+    # Load default MIDI IN settings
+    if self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_LOAD_SET_FILE) == False:
+      print('DEFAULT MIDI-IN SET: NO FILE')
+
+    # All notes off
+    self.message_center.phone_message(self, self.message_center.MSGID_MIDI_ALL_NOTES_OFF)
+
     self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_CHANNEL_DELTA, {'delta': 0})
     self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_PROGRAM_DELTA, {'delta': 0})
     self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_PARM_TITLE_SET_TEXT)
@@ -4878,19 +5030,6 @@ class unit5c2_synth_application_class(message_center_class):
     self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_PARM_VALUE_SET_TEXT, {'value': smf_settings['reverb'][0]})
     self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_COLOR, {'label': 'label_smf_parameter', 'fore': 0x00ffcc, 'back': 0x222222})
     self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_COLOR, {'label': 'label_smf_parm_value', 'fore': 0xffffff, 'back': 0x222222})
-
-    # Prepare SYNTH data and all notes off
-    self.message_center.phone_message(self, self.message_center.MSGID_MIDI_ALL_NOTES_OFF)
-
-    # Load default MIDI IN settings
-    if self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_LOAD_SET_FILE) == False:
-      print('DEFAULT MIDI-IN SET: NO FILE')
-
-    # All notes off
-    self.message_center.phone_message(self, self.message_center.MSGID_MIDI_ALL_NOTES_OFF)
-
-    # GUI for MIDI-IN Player draw
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_INITIAL_DISPLAY, {'file_op': self.enc_midi_set_ctrl_list[self.enc_midi_set_ctrl]})
 
   # Screen change
   def func_APPLICATION_SCREEN_CHANGE(self, message_data):
@@ -4902,7 +5041,7 @@ class unit5c2_synth_application_class(message_center_class):
       self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SCREEN_VISIBILITY, {'visible': False})
       self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SCREEN_VISIBILITY, {'visible': True})
       self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SCREEN_VISIBILITY, {'visible': True})
-      self.message_center.send_message(self, self.message_center.MSGID_APPLICATION_SHOW_MASTER_VOLUME_VALUE, None)
+      self.message_center.phone_message(self, self.message_center.MSGID_APPLICATION_SHOW_MASTER_VOLUME_VALUE, None)
 
       self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SEND_ALL_MIDI_SETTINGS)
 
@@ -4910,14 +5049,14 @@ class unit5c2_synth_application_class(message_center_class):
       self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SCREEN_VISIBILITY, {'visible': False})
       self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SCREEN_VISIBILITY, {'visible': False})
       self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SCREEN_VISIBILITY, {'visible': True})
-      self.message_center.send_message(self, self.message_center.MSGID_APPLICATION_SHOW_MASTER_VOLUME_VALUE, None)
+      self.message_center.phone_message(self, self.message_center.MSGID_APPLICATION_SHOW_MASTER_VOLUME_VALUE, None)
 
   def func_APPLICATION_FLUSH_MIDI_IN_SIGN(self, message_data = None):
     if self.app_screen_mode == self.SCREEN_MODE_PLAYER:
       self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_TEXT, {'label': 'label_midi_in', 'value': '*' if message_data['midi_in'] else ''})
 
   def func_APPLICATION_PLAYER_CONTROL(self, message_data = None):
-    self.message_center.send_message(self, self.message_center.MSGID_SMF_PLAYER_CONTROL)
+    self.message_center.phone_message(self, self.message_center.MSGID_SMF_PLAYER_CONTROL)
 
 ################# End of unit5c2_synth_application_class Definition #################
 
@@ -5079,7 +5218,7 @@ class device_8encoder_class(message_center_class):
 
     # The slide switch status is changed
     if self.slide_switch_change:
-      self.message_center.send_message(self, self.message_center.MSGID_APPLICATION_SWITCH_UPPER_LOWER, {'slide_switch_value': self.slide_switch_value})
+      self.message_center.phone_message(self, self.message_center.MSGID_APPLICATION_SWITCH_UPPER_LOWER, {'slide_switch_value': self.slide_switch_value})
 
     # Scan encoders
     for enc_ch in range(1,9):
@@ -5165,11 +5304,11 @@ class device_8encoder_class(message_center_class):
       if enc_menu == self.ENC_SMF_FILE:
           # Select a MIDI file
           if delta != 0:
-            self.message_center.send_message(self, self.message_center.MSGID_SMF_PLAYER_CHANGE_SMF_FILE_NO, {'delta': delta})
+            self.message_center.phone_message(self, self.message_center.MSGID_SMF_PLAYER_CHANGE_SMF_FILE_NO, {'delta': delta})
 
           # Play the selected MIDI file or stop playing
           if enc_button == True:
-            self.message_center.send_message(self, self.message_center.MSGID_APPLICATION_PLAYER_CONTROL)
+            self.message_center.phone_message(self, self.message_center.MSGID_APPLICATION_PLAYER_CONTROL)
 
       # Set transpose for SMF player
       elif enc_menu == self.ENC_SMF_TRANSPORSE:
@@ -5286,11 +5425,11 @@ class device_8encoder_class(message_center_class):
       elif enc_menu == self.ENC_MIDI_FILE:
         # File control
         if delta != 0:
-          self.message_center.send_message(self, self.message_center.MSGID_APPLICATION_MIDI_FILE_OPERATION, {'delta': delta})
+          self.message_center.phone_message(self, self.message_center.MSGID_APPLICATION_MIDI_FILE_OPERATION, {'delta': delta})
 
         # File operation button
         if enc_button and self.enc_button_ch[enc_ch-1]:
-          self.message_center.send_message(self, self.message_center.MSGID_APPLICATION_MIDI_FILE_LOAD_SAVE, None)
+          self.message_center.phone_message(self, self.message_center.MSGID_APPLICATION_MIDI_FILE_LOAD_SAVE, None)
 
       # Select MIDI channel to edit
       elif enc_menu == self.ENC_MIDI_CHANNEL:
@@ -5382,7 +5521,7 @@ class device_8encoder_class(message_center_class):
         if delta != 0: 
             master_volume_delta = delta * (10 if self.enc_mastervol_decade else 1)
             self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_MASTER_VOLUME_DELTA, {'delta': master_volume_delta})
-            self.message_center.send_message(self, self.message_center.MSGID_APPLICATION_SHOW_MASTER_VOLUME_VALUE, None)
+            self.message_center.phone_message(self, self.message_center.MSGID_APPLICATION_SHOW_MASTER_VOLUME_VALUE, None)
 
         # All notes off
         if enc_button:
@@ -5393,9 +5532,9 @@ class device_8encoder_class(message_center_class):
       # Change screen mode
       elif enc_menu == self.ENC_SMF_SCREEN or enc_menu == self.ENC_MIDI_SCREEN or enc_menu == self.ENC_SEQ_SCREEN1 or enc_menu == self.ENC_SEQ_SCREEN2:
         if delta != 0:
-          self.message_center.send_message(self, self.message_center.MSGID_APPLICATION_SCREEN_CHANGE, {'delta': delta})
+          self.message_center.phone_message(self, self.message_center.MSGID_APPLICATION_SCREEN_CHANGE, {'delta': delta})
           self.message_center.flush_messages()
-          self.message_center.send_message(self, self.message_center.MSGID_APPLICATION_SWITCH_UPPER_LOWER, {'slide_switch_value': self.slide_switch_value})
+          self.message_center.phone_message(self, self.message_center.MSGID_APPLICATION_SWITCH_UPPER_LOWER, {'slide_switch_value': self.slide_switch_value})
 
       ##### SEQUENCER SREEN MODE #####
 
@@ -5636,8 +5775,14 @@ class device_8encoder_class(message_center_class):
 def loop():
   M5.update()
 
-  # Receive MIDI-IN and send data to the synthesizer and MIDI-OUT
-  received = midi_obj.midi_in_out()
+  # SEQUENCER: Input note by MIDI-IN
+  if application.is_sequencer_screen():
+    received = application.message_center.phone_message(application, application.message_center.MSGID_SEQUENCER_PUT_NOTE_BY_MIDI_IN)
+
+  # PLAYERS: Receive MIDI-IN and send data to the synthesizer and MIDI-OUT
+  else:
+    received = midi_obj.midi_in_out()
+
   application.message_center.phone_message(application, application.message_center.MSGID_APPLICATION_FLUSH_MIDI_IN_SIGN, {'midi_in': received})
 
   # Scan device status and take actions
@@ -5681,12 +5826,12 @@ if __name__ == '__main__':
     sequencer_obj.delegate_graphics(view_sequencer)
     sequencer_obj.setup_sequencer()
     sequencer_obj.message_center.phone_message(sequencer_obj, sequencer_obj.message_center.MSGID_SEQUENCER_SETUP, None)
+    Widgets.fillScreen(0x222222)
 
     # Application object
     application = unit5c2_synth_application_class(message_center)
 
     application.message_center.phone_message(application, application.message_center.MSGID_APPLICATION_SETUP_PLAYER_SCREEN, None)
-    application.message_center.flush_messages()
     application.message_center.phone_message(application, application.message_center.MSGID_SMF_PLAYER_MAKE_SMF_CATALOG)
 
     # Run the application
