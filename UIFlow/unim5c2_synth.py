@@ -46,6 +46,8 @@
 #                       MIDI-IN channel override in the sequencer mode.
 #                       Note input by MIDI-IN in the sequencer edit mode.
 #                       DRUM SET is available in MIDI channel 10 (program internal value is 9).
+#              1.1.2: 11/08/2024
+#                       Note edit by MIDI-IN in the sequencer edit mode.
 #
 # Copyright (C) Shunsuke Ohira, 2024
 #####################################################################################################
@@ -327,6 +329,7 @@ class message_definitions():
     self.MSGID_SEQUENCER_SET_GET_EDIT_TRACK = 457
     self.MSGID_SEQUENCER_IS_MENU_PARM_RECORD = 458
     self.MSGID_SEQUENCER_PUT_NOTE_BY_MIDI_IN = 459
+    self.MSGID_SEQUENCER_CHANGE_RECODE_MODE = 460
     self.VIEW_DISPLAY_CLEAR = 499
 
     self.VIEW_SMF_PLAYER_SETUP = 2001
@@ -1739,6 +1742,14 @@ class sequencer_class():
     self.seq_file_ctrl = self.SEQ_FILE_NOP                 # Currnet MIDI IN setting file operation id
     self.seq_file_ctrl_label = ['L', 'S', '-']             # Load / Save / nop
 
+    # Sequencer recording mode
+    self.SEQ_RECD_PUT = 0
+    self.SEQ_RECD_EXPAND = 1
+    self.SEQ_RECD_SHRINK = 2
+    self.SEQ_RECD_DELETE = 3
+    self.seq_recd_mode = self.SEQ_RECD_PUT
+    self.seq_recd_mode_label = ['PUT', 'EXP', 'SHR', 'DEL']
+
     # Sequencer parameter
     #   Sequencer parameter strings to show
     self.SEQUENCER_PARM_CHANNEL = 0                        # Change a track MIDI channel
@@ -1989,6 +2000,17 @@ class sequencer_class():
   # Get program for a channel
   def get_seq_program(self, channel):
     return self.seq_control['program'][channel]
+
+  # Set / Get recording mode
+  def seq_recording_mode(self, delta = None):
+    if not delta is None:
+      self.seq_recd_mode = (self.seq_recd_mode + delta) % len(self.seq_recd_mode_label)
+
+    return self.seq_recd_mode
+
+  # Get recording mode label
+  def get_seq_recording_mode_label(self):
+    return self.seq_recd_mode_label[self.seq_recording_mode()]
 
   # Save sequencer file
   def sequencer_save_file(self, path, num):
@@ -2327,7 +2349,8 @@ class sequencer_class():
   def midi_in_out_and_put_notes(self):
     # Get MIDI-IN and send data to MIDI-OUT as the current track MIDI channel
     received = False
-    added_notes = 0
+    get_note_on_off = False
+    edited_notes = 0
     time_cursor = self.seq_control['time_cursor']
     trk_channel = self.get_track_midi()
     in_buffer = bytearray(0)
@@ -2340,6 +2363,7 @@ class sequencer_class():
         evt = mdt & 0xF0
         if 0x80 <= evt and evt <= 0xE0:
           midi_out_data.extend((evt | trk_channel).to_bytes(1, 'little'))
+          get_note_on_off = True
         else:
           midi_out_data.extend(mdt.to_bytes(1, 'little'))
 
@@ -2351,7 +2375,10 @@ class sequencer_class():
         in_buffer.extend(midi_data)
       
       # Next MIDI-IN
-      midi_data = self.midi_obj.midi_in()
+      if get_note_on_off:
+        midi_data = self.midi_obj.midi_in()
+      else:
+        break
 
     # Get note-on events
     note_on_flg = False
@@ -2360,12 +2387,37 @@ class sequencer_class():
       for mdt in in_buffer:
         # Velosity
         if not note_on_key is None:
+          # Find a existing note
+          exist_note = self.sequencer_find_note(self.seq_edit_track, time_cursor, int(note_on_key))
+
           # Add a note
-          if self.sequencer_find_note(self.seq_edit_track, time_cursor, int(note_on_key)) is None:
-            self.sequencer_new_note(trk_channel, time_cursor, int(note_on_key), int(mdt))
-            added_notes = added_notes + 1
-          else:
-            print('CANCEL DUPLICATED NOTE:', note_on_key)
+          recd_mode = self.seq_recording_mode()
+          if recd_mode == self.SEQ_RECD_PUT:
+            if exist_note is None:
+              self.sequencer_new_note(trk_channel, time_cursor, int(note_on_key), int(mdt))
+              edited_notes = edited_notes + 1
+            else:
+              print('CANCEL DUPLICATED NOTE:', note_on_key)
+
+          elif recd_mode == self.SEQ_RECD_EXPAND:
+            if not exist_note is None:
+              exp_time = exist_note[0]['time'] + exist_note[1]['duration']
+              if self.sequencer_find_note(self.seq_edit_track, exp_time, int(note_on_key)) is None:
+                exist_note[1]['duration'] = exist_note[1]['duration'] + 1
+                self.sequencer_duration_update(exist_note[0])
+                edited_notes = edited_notes + 1
+
+          elif recd_mode == self.SEQ_RECD_SHRINK:
+            if not exist_note is None:
+              if exist_note[1]['duration'] > 1:
+                exist_note[1]['duration'] = exist_note[1]['duration'] - 1
+                self.sequencer_duration_update(exist_note[0])
+                edited_notes = edited_notes + 1
+
+          elif recd_mode == self.SEQ_RECD_DELETE:
+            if not exist_note is None:
+              self.sequencer_delete_note(*exist_note)
+              edited_notes = edited_notes + 1
             
           note_on_flg = False
           note_on_key = None
@@ -2382,7 +2434,7 @@ class sequencer_class():
             note_on_key = None
 
     # New note exsits
-    if added_notes > 0:
+    if edited_notes > 0:
       self.seq_cursor_note = self.sequencer_find_note(self.seq_edit_track, self.seq_control['time_cursor'], self.seq_control['key_cursor'][self.seq_edit_track])
       self.sequencer_draw_track(self.seq_edit_track)
 
@@ -2951,6 +3003,7 @@ class sequencer_message_class(sequencer_class):
       self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_SET_GET_EDIT_TRACK, self.func_SEQUENCER_SET_GET_EDIT_TRACK)
       self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_IS_MENU_PARM_RECORD, self.func_SEQUENCER_IS_MENU_PARM_RECORD)
       self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_PUT_NOTE_BY_MIDI_IN, self.func_SEQUENCER_PUT_NOTE_BY_MIDI_IN)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_CHANGE_RECODE_MODE, self.func_SEQUENCER_CHANGE_RECODE_MODE)
 
     else:
       self.message_center = message_center_class()
@@ -3442,6 +3495,12 @@ class sequencer_message_class(sequencer_class):
     trknum = message_data['track_number']
     self.edit_track(trknum)
     return trknum
+
+  def func_SEQUENCER_CHANGE_RECODE_MODE(self, message_data = None):
+    if not message_data is None:
+      self.seq_recording_mode(message_data['delta'])
+
+    return self.seq_recording_mode()
 
   def func_SEQUENCER_PUT_NOTE_BY_MIDI_IN(self, message_data = None):
     return self.midi_in_out_and_put_notes()
@@ -4644,8 +4703,8 @@ class view_sequencer_class(view_m5stack_core2):
       self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_program2', 'value': prg})
 
   def func_SEQUENCER_RECORD_MODE(self, message_data = None):
-    print('func_SEQUENCER_RECORD_MODE')
-    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_parm_value', 'value': ''})
+    recd_mode = self.data_obj.get_seq_recording_mode_label()
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_parm_value', 'value': recd_mode})
 
   def func_SEQUENCER_REPEAT_SIGN_SET_TEXT(self, message_data = None):
     if not message_data is None:
@@ -4779,8 +4838,10 @@ class view_sequencer_class(view_m5stack_core2):
       self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_parm_value', 'format': '{:03d}', 'value': self.data_obj.get_seq_program(self.data_obj.get_track_midi())})
     elif self.data_obj.seq_parm == self.data_obj.SEQUENCER_PARM_CHANNEL_VOL:
       self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_parm_value', 'format': '{:03d}', 'value': self.data_obj.get_seq_channel(self.data_obj.get_track_midi(), 'volume')})
+    elif self.data_obj.seq_parm == self.data_obj.SEQUENCER_PARM_RECORD:
+      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_RECORD_MODE)
     else:
-      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_parm_value', 'value': ''})
+      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_parm_value', 'value': '  '})
 
   def func_SEQUENCER_SCREEN_VISIBILITY(self, message_data = None):
     visible = message_data['visible']
@@ -5250,7 +5311,6 @@ class device_8encoder_class(message_center_class):
       if delta != 0:
         self.encoder8_0.set_counter_value(enc_ch, 0)
 
-######====== IMPLEMET NOT YET ======######
       ## PRE-PROCESS: Parameter encoder
       if enc_menu == self.ENC_SMF_PARAMETER or enc_menu == self.ENC_MIDI_PARAMETER:
         if delta != 0 or slide_switch_change:
@@ -5442,7 +5502,6 @@ class device_8encoder_class(message_center_class):
         if enc_button == True:
           ch = self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_GET_MIDI_IN_CHANNEL)
           self.message_center.phone_message(self, self.message_center.MSGID_MIDI_ALL_NOTES_OFF, {'channel': ch})
-#PITCH BEND TEST          self.message_center.phone_message(self, self.message_center.MSGID_MIDI_SEND_PITCH_BEND, {'channel': ch, 'value': 1000})
 
       # Select program for MIDI channel
       elif enc_menu == self.ENC_MIDI_PROGRAM:
@@ -5763,6 +5822,7 @@ class device_8encoder_class(message_center_class):
 
           # MIDI note-on/off recording mode
           elif self.message_center.phone_message(self, self.message_center.MSGID_SEQUENCER_IS_MENU_PARM_RECORD):
+              self.message_center.phone_message(self, self.message_center.MSGID_SEQUENCER_CHANGE_RECODE_MODE, {'delta': delta})
               self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_RECORD_MODE)
             
 
