@@ -49,7 +49,7 @@
 #              1.1.2: 11/08/2024
 #                       Note edit by MIDI-IN in the sequencer edit mode.
 #            unim5c2t_synth.py
-#              1.0.0: 11/15/2024
+#              1.0.0: 11/18/2024
 #                       Pad controller is available for drum set.
 #
 # Copyright (C) Shunsuke Ohira, 2024
@@ -235,6 +235,7 @@ class message_definitions():
     self.MSGID_APPLICATION_SCREEN_CHANGE = 8
     self.MSGID_APPLICATION_FLUSH_MIDI_IN_SIGN = 9
     self.MSGID_APPLICATION_PAD_CONTROLLER = 10
+    self.MSGID_APPLICATION_GET_PAD_CONTROLLER = 11
 
     self.MSGID_MIDI_ALL_NOTES_OFF = 101
     self.MSGID_MIDI_GET_PROGRAM_NAME = 102
@@ -401,6 +402,8 @@ class message_definitions():
 
     self.VIEW_PAD_CONTROLLER_DRAW_PAD = 5001
     self.VIEW_PAD_CONTROLLER_DRAW_ALL_PADS = 5002
+    self.VIEW_PAD_CONTROLLER_SHOW_PAD_NAME = 5003
+    self.VIEW_PAD_CONTROLLER_SETUP = 5004
 
     self.MSGID_DEVICE_PHONE_SEQ_TURN_OFF_PLAY_BUTTON = 10001
     self.MSGID_DEVICE_PHONE_SEQ_GET_PAUSE_STOP_BUTTON = 10002
@@ -4083,10 +4086,12 @@ class view_smf_player_class(view_m5stack_core2):
     self.add_label('label_smf_parm_title', 201, 0, 1.0, 0x00ccff, 0x222222, Widgets.FONTS.DejaVu18)
 
   def func_SMF_PLAYER_ACTIVATED(self, message_data):
-    self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_COLOR, {'label': 'title_smf_params', 'fore': 0xff4040, 'back': 0x555555})
+#    self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_COLOR, {'label': 'title_smf_params', 'fore': 0xff4040, 'back': 0x555555})
+    pass
 
   def func_SMF_PLAYER_INACTIVATED(self, message_data):
-    self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_COLOR, {'label': 'title_smf_params', 'fore': 0xff8080, 'back': 0x222222})
+#    self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SET_COLOR, {'label': 'title_smf_params', 'fore': 0xff8080, 'back': 0x222222})
+    pass
 
   def func_SMF_PLAYER_FNAME_SET_TEXT(self, message_data = None):
     if message_data is None:
@@ -4247,10 +4252,12 @@ class view_midi_in_player_class(view_m5stack_core2):
     self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_COLOR, {'label': 'label_midi_parm_value', 'fore': 0xffffff, 'back': 0x222222})
 
   def func_MIDI_IN_PLAYER_ACTIVATED(self, message_data):
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_COLOR, {'label': 'title_midi_in_params', 'fore': 0xff4040, 'back': 0x555555})
+#    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_COLOR, {'label': 'title_midi_in_params', 'fore': 0xff4040, 'back': 0x555555})
+    pass
 
   def func_MIDI_IN_PLAYER_INACTIVATED(self, message_data):
-    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_COLOR, {'label': 'title_midi_in_params', 'fore': 0xff8080, 'back': 0x222222})
+#    self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_COLOR, {'label': 'title_midi_in_params', 'fore': 0xff8080, 'back': 0x222222})
+    pass
 
   def func_MIDI_IN_PLAYER_SET_SET_TEXT(self, message_data = None):
     if message_data is None:
@@ -4630,9 +4637,9 @@ class view_sequencer_class(view_m5stack_core2):
 
   def func_SEQUENCER_ACTIVATED(self, message_data):
     self.data_obj.set_cursor_note(self.data_obj.sequencer_find_note(self.data_obj.edit_track(), self.data_obj.get_seq_time_cursor(), self.data_obj.get_seq_key_cursor(self.data_obj.edit_track())))
-    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_DRAW_TRACK)
-    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_COLOR, {'label': 'label_seq_key1', 'fore': 0xff4040 if self.data_obj.edit_track() == 0 else 0x00ccff, 'back': 0x222222})
-    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_COLOR, {'label': 'label_seq_key2', 'fore': 0xff4040 if self.data_obj.edit_track() == 1 else 0x00ccff, 'back': 0x222222})
+#    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_DRAW_TRACK)
+#    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_COLOR, {'label': 'label_seq_key1', 'fore': 0xff4040 if self.data_obj.edit_track() == 0 else 0x00ccff, 'back': 0x222222})
+#    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_COLOR, {'label': 'label_seq_key2', 'fore': 0xff4040 if self.data_obj.edit_track() == 1 else 0x00ccff, 'back': 0x222222})
 
     self.data_obj.send_all_sequencer_settings()
 
@@ -4943,6 +4950,7 @@ class unit5c2_synth_application_class(message_center_class):
       self.message_center.add_subscriber(self, self.message_center.MSGID_APPLICATION_PLAYER_CONTROL, self.func_APPLICATION_PLAYER_CONTROL)
       self.message_center.add_subscriber(self, self.message_center.MSGID_APPLICATION_FLUSH_MIDI_IN_SIGN, self.func_APPLICATION_FLUSH_MIDI_IN_SIGN)
       self.message_center.add_subscriber(self, self.message_center.MSGID_APPLICATION_PAD_CONTROLLER, self.func_APPLICATION_PAD_CONTROLLER)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_APPLICATION_GET_PAD_CONTROLLER, self.func_APPLICATION_GET_PAD_CONTROLLER)
 
     else:
       self.message_center = self
@@ -5115,28 +5123,30 @@ class unit5c2_synth_application_class(message_center_class):
   # Screen change
   def func_APPLICATION_SCREEN_CHANGE(self, message_data):
     self.message_center.phone_message(self, self.message_center.VIEW_DISPLAY_CLEAR, {'color': 0x222222})
-
     self.app_screen_mode = (self.app_screen_mode + message_data['delta']) % 2
 
-    if   self.app_screen_mode == self.SCREEN_MODE_PLAYER:
+    # Pad controller overlay
+    if self.message_center.phone_message(self, self.message_center.MSGID_APPLICATION_GET_PAD_CONTROLLER):
+      self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SCREEN_VISIBILITY, {'visible': False})
+      self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SCREEN_VISIBILITY, {'visible': False})
+      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SCREEN_VISIBILITY, {'visible': False})
+      self.message_center.phone_message(self, self.message_center.MSGID_APPLICATION_SHOW_MASTER_VOLUME_VALUE, None)
+      self.message_center.phone_message(self, self.message_center.VIEW_PAD_CONTROLLER_DRAW_ALL_PADS)
+
+    # Player screen
+    elif   self.app_screen_mode == self.SCREEN_MODE_PLAYER:
       self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SCREEN_VISIBILITY, {'visible': False})
       self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SCREEN_VISIBILITY, {'visible': True})
       self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SCREEN_VISIBILITY, {'visible': True})
       self.message_center.phone_message(self, self.message_center.MSGID_APPLICATION_SHOW_MASTER_VOLUME_VALUE, None)
-
       self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SEND_ALL_MIDI_SETTINGS)
 
+    # Sequencer screen
     elif self.app_screen_mode == self.SCREEN_MODE_SEQUENCER:
       self.message_center.phone_message(self, self.message_center.VIEW_SMF_PLAYER_SCREEN_VISIBILITY, {'visible': False})
       self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SCREEN_VISIBILITY, {'visible': False})
       self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SCREEN_VISIBILITY, {'visible': True})
       self.message_center.phone_message(self, self.message_center.MSGID_APPLICATION_SHOW_MASTER_VOLUME_VALUE, None)
-
-    if self.app_pad_controller:
-      print('SHOW PAD CONTROLLER 0')
-      self.message_center.phone_message(self, self.message_center.VIEW_PAD_CONTROLLER_DRAW_ALL_PADS)
-    else:
-      print('NO PAD CONTROLLER')
 
   def func_APPLICATION_FLUSH_MIDI_IN_SIGN(self, message_data = None):
     if self.app_screen_mode == self.SCREEN_MODE_PLAYER:
@@ -5147,12 +5157,10 @@ class unit5c2_synth_application_class(message_center_class):
 
   def func_APPLICATION_PAD_CONTROLLER(self, message_data = None):
     self.app_pad_controller = not self.app_pad_controller
-    if self.app_pad_controller:
-      print('SHOW PAD CONTROLLER 1')
-      self.message_center.phone_message(self, self.message_center.VIEW_PAD_CONTROLLER_DRAW_ALL_PADS)
-    else:
-      print('ERASE PAD CONTROLLER')
-      self.message_center.phone_message(self, self.message_center.MSGID_APPLICATION_SCREEN_CHANGE, {'delta': 0})
+    self.message_center.phone_message(self, self.message_center.MSGID_APPLICATION_SCREEN_CHANGE, {'delta': 0})
+
+  def func_APPLICATION_GET_PAD_CONTROLLER(self, message_data = None):
+    return self.app_pad_controller
 
 ################# End of unit5c2_synth_application_class Definition #################
 
@@ -5876,16 +5884,33 @@ class pad_controller_class():
     self.midi_obj = midi_obj
     self.drum_channel = 9                             # MIDI channel for drum set
     self.pad_set_num = 0                              # Pad controller setting file number to load/save
-    self.PAD_FILE_PATH = '/sd//SYNTH/MIDIUNIT/'       # MIDI IN setting files path
+    self.DRUMSET_FILE_PATH = '/sd//SYNTH/MIDIFILE/'   # DRUM SET LIST files path
+    self.DRUMSET_FILE_NAME = 'DRUMSET.TXT'
     self.PAD_SET_FILES_MAX = 1000                     # Maximum MIDI IN setting files
 
+    self.SET_BASS_SNARE_TOM      = 'BA_SN_TM'
+    self.SET_HAT_CYMBAL          = 'HiHA_CYM'
+    self.SET_BELL_BONGO          = 'BEL_BONG'
+    self.SET_AGOGO_MARACAS_BLOCK = 'AG_MA_BL'
+    self.SET_WHISTLE_GUIRO       = 'WHIS_GUI'
+
     # Pad Controller
+    self.next_ticks = 1200000                         # Long press ticks
+    self.show_pad_name = False
     self.pad_shapes = []                              # Pad shapes on GUI
-                                                      #   Rentangle pad: {'func': 'drum', 'note': drum_note, 'shape': 'rect', 'figure': (x,y,w,h)}
-                                                      #   Circle    pad: {'func': 'drum', 'note': drum_note, , 'shape': 'circle', 'figure': (x,y,r)}
-    self.pad_settings = []                            # Pad controller settings
-                                                      # Each setting has following data structure
-                                                      # 
+                                                      #   Rentangle pad: {'func': 'drum', 'group': group_num, 'instrument': instrument_num, 'shape': 'rect', 'figure': (x,y,w,h)}
+                                                      #   Circle    pad: {'func': 'drum', 'group': group_num, 'instrument': instrument_num, 'shape': 'circle', 'figure': (x,y,r)}
+
+    # Drum set groups
+    self.pad_groups = [self.SET_BASS_SNARE_TOM, self.SET_HAT_CYMBAL, self.SET_BELL_BONGO, self.SET_AGOGO_MARACAS_BLOCK, self.SET_WHISTLE_GUIRO]
+    self.pad_instruments = {                          # Note number
+      self.SET_BASS_SNARE_TOM: [35, 36, 38, 40, 41, 43, 45, 47, 48, 50],
+      self.SET_HAT_CYMBAL: [37, 39, 42, 44, 46, 49, 51, 52, 53, 54, 55, 57, 59],
+      self.SET_BELL_BONGO: [56, 58, 60, 61, 62, 63, 64, 65, 66],
+      self.SET_AGOGO_MARACAS_BLOCK: [67, 68, 69, 70, 75, 76, 77],
+      self.SET_WHISTLE_GUIRO: [71, 72, 73, 74, 78, 79, 80, 81]
+    }
+
     self.note_on = -1
 
     # SYNTH settings
@@ -5900,30 +5925,79 @@ class pad_controller_class():
   def get_pad_at(self, x, y):
     for shape in self.pad_shapes:
       figure = shape['figure']
-      if shape['shape'] == 'rect':
+      if shape['shape'] == 'circle':
+        dsq = (figure[0] - x) * (figure[0] - x) + (figure[1] - y) * (figure[1] - y)
+        if dsq <= figure[2] * figure[2]:
+          return shape
+
+      else:
         if figure[0] <= x and x <= figure[0] + figure[2] and figure[1] <= y and y <= figure[1] + figure[3]:
           return shape
 
-      elif shape['shape'] == 'circle':
-        dsq = (figure[0] - x) * (figure[0] - x) + (figure[0] - y) * (figure[0] - y)
-        if dsq <= figure[2] + figure[2]:
-          return shape
-
     return None
+
+  # Get drum set instrument name
+  def get_drum_set_instrument(self, instrument):
+    instrument = instrument - 35
+    f = self.sdcard_obj.file_open(self.DRUMSET_FILE_PATH, self.DRUMSET_FILE_NAME)
+    if not f is None:
+      for mf in f:
+        mf = mf.strip()
+        if len(mf) > 0:
+          if instrument == 0:
+            self.sdcard_obj.file_close()
+            return mf
+
+        instrument = instrument - 1
+
+      self.sdcard_obj.file_close()
+
+    return 'UNKNOWN'
 
   # Pad touched
   def event_touch(self, touch_x, touch_y):
     shape = self.get_pad_at(touch_x, touch_y)
     if not shape is None:
+      self.next_ticks = 1200000
       if shape['func'] == 'drum':
-        self.note_on = shape['note']
+        self.note_on = self.pad_instruments[self.pad_groups[shape['group']]][shape['instrument']]
         self.midi_obj.set_note_on(self.drum_channel, self.note_on, 127)
 
   # Pad released
   def event_release(self, touch_x, touch_y, touch_ticks):
     if self.note_on > 0:
       self.midi_obj.set_note_off(self.drum_channel,self.note_on)
-            
+
+  # Pad during pressing
+  def event_during_pressing(self, touch_x, touch_y, touch_ticks, press_ticks):
+#    print('TICKS:', touch_ticks, press_ticks)
+    if press_ticks >= self.next_ticks:
+      self.next_ticks = self.next_ticks + 1200000
+      shape = self.get_pad_at(touch_x, touch_y)
+      if not shape is None:
+        group = self.pad_groups[shape['group']]
+        insts = self.pad_instruments[group]
+        shape['instrument'] = (shape['instrument'] + 1) % len(insts)
+        note = insts[shape['instrument']]
+        instname = self.get_drum_set_instrument(note)
+#        print('GROUP/INST:', group, shape['instrument'], instname)
+        return shape
+
+    elif self.show_pad_name == False:
+      if press_ticks >= 500000:
+        self.show_pad_name = True
+        return self.get_pad_at(touch_x, touch_y)
+
+    return None
+
+  # Pad finish pressing
+  def event_finish_pressing(self, touch_x, touch_y, touch_ticks, press_ticks):
+    shape = self.event_during_pressing(touch_x, touch_y, touch_ticks, press_ticks)
+    self.next_ticks = 1200000
+    self.show_pad_name = False
+
+    return shape
+
 ################# End of 8Encoder Device Class Definition #################
 
 
@@ -5985,9 +6059,9 @@ class device_touch_pad_class(message_center_class):
 
   def func_DEVICE_TOUCH_DELEGATE_EVENT_DURING_PRESSING(self, message_data = None):
     if message_data is None:
-      self.delegate_delegate_event_during_pressing = None
+      self.delegate_event_during_pressing = None
     else:
-      self.delegate_delegate_event_during_pressing = message_data['delegate']    
+      self.delegate_event_during_pressing = message_data['delegate']    
 
   def func_DEVICE_TOUCH_DELEGATE_EVENT_FINISH_PRESSING(self, message_data = None):
     if message_data is None:
@@ -6027,11 +6101,11 @@ class device_touch_pad_class(message_center_class):
 
   def event_during_pressing(self, touch_x, touch_y, touch_ticks, press_ticks):
     if not self.delegate_event_during_pressing is None:
-      self.delegate_event_during_pressing(touch_x, touch_y, touch_ticks, press_ticks)
+      return self.delegate_event_during_pressing(touch_x, touch_y, touch_ticks, press_ticks)
 
   def event_finish_pressing(self, touch_x, touch_y, touch_ticks, press_ticks):
     if not self.delegate_event_finish_pressing is None:
-      self.delegate_event_finish_pressing(touch_x, touch_y, touch_ticks, press_ticks)
+      return self.delegate_event_finish_pressing(touch_x, touch_y, touch_ticks, press_ticks)
 
   def event_start_dragging(self, drag_points, touch_ticks):
     if not self.delegate_event_start_dragging is None:
@@ -6081,7 +6155,8 @@ class device_touch_pad_class(message_center_class):
 
           # Keep pressing
           else:
-            self.event_during_pressing(self.touch_x, self.touch_y, d_touch_ticks, time.ticks_diff(t_ticks, self.press_ticks))
+            shape = self.event_during_pressing(self.touch_x, self.touch_y, d_touch_ticks, time.ticks_diff(t_ticks, self.press_ticks))
+            self.message_center.phone_message(self, self.message_center.VIEW_PAD_CONTROLLER_SHOW_PAD_NAME, None if shape is None else {'shape': shape})
 
         # Dragging
         else:
@@ -6093,8 +6168,9 @@ class device_touch_pad_class(message_center_class):
           # Finish pressing (moved)
           if self.pressing:
             self.pressing = False
-            self.event_finish_pressing(self.touch_x, self.touch_y, d_touch_ticks, time.ticks_diff(t_ticks, self.press_ticks))
+            shape = self.event_finish_pressing(self.touch_x, self.touch_y, d_touch_ticks, time.ticks_diff(t_ticks, self.press_ticks))
             self.press_ticks = 0
+            self.message_center.phone_message(self, self.message_center.VIEW_PAD_CONTROLLER_SHOW_PAD_NAME, None if shape is None else {'shape': shape})
 
           # First sense dragging
           if self.dragging == False:
@@ -6142,11 +6218,18 @@ class view_pad_controller_class(view_m5stack_core2):
     if not message_center is None:
       self.message_center = message_center
 #      self.message_center.add_contributor(self)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_PAD_CONTROLLER_SETUP, self.func_PAD_CONTROLLER_SETUP)
       self.message_center.add_subscriber(self, self.message_center.VIEW_PAD_CONTROLLER_DRAW_PAD, self.func_PAD_CONTROLLER_DRAW_PAD)
       self.message_center.add_subscriber(self, self.message_center.VIEW_PAD_CONTROLLER_DRAW_ALL_PADS, self.func_PAD_CONTROLLER_DRAW_ALL_PADS)
+      self.message_center.add_subscriber(self, self.message_center.VIEW_PAD_CONTROLLER_SHOW_PAD_NAME, self.func_PAD_CONTROLLER_SHOW_PAD_NAME)
 
     else:
       self.message_center = self
+
+  def func_PAD_CONTROLLER_SETUP(self, message_data = None):
+    # Data labels
+    self.add_label('label_pad_name', 80, 220, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+    self.show_pad_name(None)
 
   def func_PAD_CONTROLLER_DRAW_PAD(self, message_data = None):
     self.pad_controller_draw_pad(message_data['pad'])
@@ -6154,19 +6237,73 @@ class view_pad_controller_class(view_m5stack_core2):
   def func_PAD_CONTROLLER_DRAW_ALL_PADS(self, message_data = None):
     self.pad_controller_draw_all_pads()
 
+  def func_PAD_CONTROLLER_SHOW_PAD_NAME(self, message_data = None):
+    if not message_data is None:
+      self.show_pad_name(message_data['shape'])
+
   # Draw a pad
   def pad_controller_draw_pad(self, pad):
     figure = pad['figure']
     if pad['shape'] == 'rect':
-      M5.Lcd.drawRect(figure[0], figure[1], figure[2], figure[3], 0xff00ff)
+      M5.Lcd.fillRect(figure[0], figure[1], figure[2], figure[3], figure[4])
+
+    elif pad['shape'] == 'symbal':
+      M5.Lcd.fillRect(figure[0], figure[1], figure[2], figure[3], figure[4])
+      xc = int(figure[0] + figure[2] / 2)
+      yc = int(figure[1] + figure[3] / 2)
+      M5.Lcd.fillRect(figure[0]+5, yc-20, figure[2]-10,  5, 0x222222)
+      M5.Lcd.fillRect(figure[0]+5, yc-10, figure[2]-10, 10, 0x222222)
+      M5.Lcd.fillRect(xc-3, yc-35, 6, int(figure[3]/2+30), 0x222222)
+
+    elif pad['shape'] == 'maracas':
+      M5.Lcd.fillRect(figure[0], figure[1], figure[2], figure[3], figure[4])
+      xc = int(figure[0] + figure[2] / 2)
+      yc = int(figure[1] + figure[3] / 2)
+      M5.Lcd.fillCircle(xc, yc-25, 20, 0x222222)
+      M5.Lcd.fillRect(xc-7, yc-25, 14, int(figure[3]/2+20), 0x222222)
+
+    elif pad['shape'] == 'whistle':
+      M5.Lcd.fillRect(figure[0], figure[1], figure[2], figure[3], figure[4])
+      xc = int(figure[0] + figure[2] / 2)
+      yc = int(figure[1] + figure[3] / 2)
+      M5.Lcd.fillCircle(xc-20, yc+10, 25, 0x222222)
+      M5.Lcd.fillRect(xc-20, yc-15, int(figure[2]/2+15), 10, 0x222222)
+
+    elif pad['shape'] == 'conga':
+      M5.Lcd.fillRect(figure[0], figure[1], figure[2], figure[3], figure[4])
+      xc = int(figure[0] + figure[2] / 2)
+      yc = int(figure[1] + figure[3] / 2)
+      M5.Lcd.fillCircle(xc-22, yc-25, 20, 0x222222)
+      M5.Lcd.fillCircle(xc+22, yc-25, 20, 0x222222)
+      M5.Lcd.fillRect(xc-42, yc-25, 40, int(figure[3]/2+20), 0x222222)
+      M5.Lcd.fillRect(xc+ 2, yc-25, 40, int(figure[3]/2+20), 0x222222)
+      M5.Lcd.fillCircle(xc-22, yc-25, 18, figure[4])
+      M5.Lcd.fillCircle(xc+22, yc-25, 18, figure[4])
 
     elif pad['shape'] == 'circle':
-      M5.Lcd.drawCircle(figure[0], figure[1], figure[2], 0xff00ff)
+      M5.Lcd.fillCircle(figure[0], figure[1], figure[2], figure[3])
+      M5.Lcd.drawCircle(figure[0], figure[1], figure[2]-5, 0x222222)
 
   # Draw all pads
   def pad_controller_draw_all_pads(self):
     for pad in self.data_obj.pad_shapes:
       self.pad_controller_draw_pad(pad)
+
+  # Show drum set instrument name
+  def show_pad_name(self, shape):
+    message_data = {}
+    message_data['label'] = 'label_pad_name'
+    if shape is None:
+      message_data['value'] = ''
+    else:
+      group = self.data_obj.pad_groups[shape['group']]
+      insts = self.data_obj.pad_instruments[group]
+      note = insts[shape['instrument']]
+      instname = self.data_obj.get_drum_set_instrument(note)
+#      print('GROUP/INST=', group, shape['instrument'], instname)
+      message_data['value'] = instname
+
+    return self.label_setText(message_data)
 
 
 ##### Program Code #####
@@ -6234,10 +6371,17 @@ if __name__ == '__main__':
     view_pad_controller = view_pad_controller_class(pad_controller_obj, message_center)
     device_touch_pad.message_center.phone_message(device_touch_pad, device_touch_pad.message_center.MSGID_DEVICE_TOUCH_DELEGATE_EVENT_TOUCH, {'delegate': pad_controller_obj.event_touch})
     device_touch_pad.message_center.phone_message(device_touch_pad, device_touch_pad.message_center.MSGID_DEVICE_TOUCH_DELEGATE_EVENT_RELEASE, {'delegate': pad_controller_obj.event_release})
-    pad_controller_obj.add_pad({'func': 'drum', 'note': 60, 'shape': 'rect', 'figure': (  0,   0, 100, 100)})
-    pad_controller_obj.add_pad({'func': 'drum', 'note': 59, 'shape': 'rect', 'figure': (110,   0, 100, 100)})
-    pad_controller_obj.add_pad({'func': 'drum', 'note': 62, 'shape': 'rect', 'figure': (  0, 110, 100, 100)})
-    pad_controller_obj.add_pad({'func': 'drum', 'note': 58, 'shape': 'rect', 'figure': (110, 110, 100, 100)})
+    device_touch_pad.message_center.phone_message(device_touch_pad, device_touch_pad.message_center.MSGID_DEVICE_TOUCH_DELEGATE_EVENT_DURING_PRESSING, {'delegate': pad_controller_obj.event_during_pressing})
+    device_touch_pad.message_center.phone_message(device_touch_pad, device_touch_pad.message_center.MSGID_DEVICE_TOUCH_DELEGATE_EVENT_FINISH_PRESSING, {'delegate': pad_controller_obj.event_finish_pressing})
+
+    pad_controller_obj.add_pad({'func': 'drum', 'group': 1, 'instrument': 0, 'shape': 'symbal',  'figure': (  0,   0, 100, 100, 0x00ff20)})   # TOP-LEFT
+    pad_controller_obj.add_pad({'func': 'drum', 'group': 3, 'instrument': 0, 'shape': 'maracas', 'figure': (109,   0, 100, 100, 0x00a0ff)})   # TOP-CENTER
+    pad_controller_obj.add_pad({'func': 'drum', 'group': 4, 'instrument': 0, 'shape': 'whistle', 'figure': (219,   0, 100, 100, 0xE09000)})   # TOP-RIGHT
+    pad_controller_obj.add_pad({'func': 'drum', 'group': 0, 'instrument': 0, 'shape': 'circle',  'figure': ( 50, 168, 50,       0xff0000)})   # BOTTOM-LEFT
+    pad_controller_obj.add_pad({'func': 'drum', 'group': 0, 'instrument': 0, 'shape': 'circle',  'figure': (159, 168, 50,       0xff00ff)})   # BOTTOM-CENTER
+    pad_controller_obj.add_pad({'func': 'drum', 'group': 2, 'instrument': 0, 'shape': 'conga',   'figure': (219, 118, 100, 100, 0xffff00)})   # BOTTOM-RIGHT
+
+    view_pad_controller.message_center.phone_message(view_pad_controller, view_pad_controller.message_center.VIEW_PAD_CONTROLLER_SETUP)
 
     # Application object
     application = unit5c2_synth_application_class(message_center)
