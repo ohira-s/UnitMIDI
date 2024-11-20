@@ -51,6 +51,9 @@
 #            unim5c2t_synth.py
 #              1.0.0: 11/18/2024
 #                       Pad controller is available for drum set.
+#              1.0.1: 11/20/2024
+#                       Bugs in sequencer are fixed.
+#                       Improve sequencer editor.
 #
 # Copyright (C) Shunsuke Ohira, 2024
 #####################################################################################################
@@ -115,11 +118,11 @@
 #
 #   8encoder.CH3
 #     VALUE : Change MIDI channel of MIDI-IN play.
-#     BUTTON: All notes off in the MIDI channel for MIDI-IN play.
+#     BUTTON: Override MIDI-IN channel to the selected channel.
 #
 #   8encoder.CH4
 #     VALUE : Select a program.
-#     BUTTON: Change value by decade or 1. (toggle)
+#     BUTTON: Change value by decade or 1. (toggle) / All notes off in the MIDI channel for MIDI-IN play.
 #
 #   8encoder.CH5
 #     VALUE : Change the effector parameter to edit. (MIDI-IN player reverb, chorus and vibrate)
@@ -163,7 +166,7 @@
 #
 #   8encoder.CH5
 #     VALUE : Change the sequencer parameter to edit.
-#     BUTTON: n/a
+#     BUTTON: Change cursor move decade or not. (toggle)
 #
 #   8encoder.CH6
 #     VALUE : Change the sequencer parameter value designated by CH5.
@@ -274,6 +277,8 @@ class message_definitions():
     self.MSGID_MIDI_IN_PLAYER_LOAD_SET_FILE = 312
     self.MSGID_MIDI_IN_PLAYER_SAVE_SET_FILE = 313
     self.MSGID_MIDI_IN_PLAYER_SET_DEFAULT = 314
+    self.MSGID_MIDI_IN_PLAYER_CHANNEL_OVERRIDE = 315
+    self.MSGID_MIDI_IN_PLAYER_MIDI_IN_OUT = 316
 
     self.MSGID_SEQUENCER_SETUP = 401
     self.MSGID_SEQUENCER_CHANGE_FILE_OP = 402
@@ -1898,6 +1903,7 @@ class sequencer_class():
   # Clear seq_score
   def clear_seq_score(self):
     self.seq_score = []
+    self.seq_score_sign = []
 
   # Get seq_score
   def get_seq_score(self):
@@ -2416,7 +2422,11 @@ class sequencer_class():
               self.sequencer_new_note(trk_channel, time_cursor, int(note_on_key), int(mdt))
               edited_notes = edited_notes + 1
             else:
-              print('CANCEL DUPLICATED NOTE:', note_on_key)
+              exp_time = exist_note[0]['time'] + exist_note[1]['duration']
+              if self.sequencer_find_note(self.seq_edit_track, exp_time, int(note_on_key)) is None:
+                exist_note[1]['duration'] = exist_note[1]['duration'] + 1
+                self.sequencer_duration_update(exist_note[0])
+                edited_notes = edited_notes + 1
 
           elif recd_mode == self.SEQ_RECD_EXPAND:
             if not exist_note is None:
@@ -2643,6 +2653,12 @@ class sequencer_class():
     self.seq_control['time_cursor'] = time_cursor
     score_len = len(self.seq_score)
     play_slot = 0
+    while play_slot < score_len:
+      if self.seq_score[play_slot]['time'] >= time_cursor:
+        break
+
+      play_slot = play_slot + 1
+
     while play_slot < score_len or end_time > play_slot or (self.midi_recording and end_time == -1):
 #      print('SEQ POINT:', time_cursor, play_slot)
       if play_slot < score_len:
@@ -2666,11 +2682,12 @@ class sequencer_class():
       tempo = int((60.0 / self.seq_control['tempo'] / (2**self.seq_control['mini_note']/4)) * 1000000)
       if score is None:
         next_notes_on = play_slot + 1
+#        next_notes_on = time_cursor + 1
       else:
         next_notes_on = score['time']
 
       while next_notes_on > time_cursor:
-  #      print('SEQUENCER AT0:', time_cursor)
+#        print('SEQUENCER AT0:', time_cursor, play_slot, tempo)
         time0 = time.ticks_us()
         if len(note_off_events) > 0:
           if note_off_events[0]['time'] == time_cursor:
@@ -2680,11 +2697,6 @@ class sequencer_class():
         midi_in_out_with_recording(time_cursor)
 
         # Adjust timing and sleep until next slot
-#        time1 = time.ticks_us()
-#        timedelta = time.ticks_diff(time1, time0)
-#        time.sleep_us(tempo - timedelta)
-#        time_cursor = move_play_cursor(time_cursor)
-
         time1 = time.ticks_us()
         timedelta = time.ticks_diff(time1, time0)
         while tempo - timedelta > 0:
@@ -2696,7 +2708,7 @@ class sequencer_class():
 
         # Loop/Skip/Repeat
         repeat_ctrl = self.sequencer_get_repeat_control(time_cursor)
-  #      print('REPEAT CTRL0:', time_cursor, repeat_ctrl)
+#        print('REPEAT CTRL0:', time_cursor, repeat_ctrl)
         if not repeat_ctrl is None:
           # Skip bar point
           if repeat_ctrl['skip']:
@@ -2733,7 +2745,7 @@ class sequencer_class():
           break
 
       # Note off
-  #    print('SEQUENCER AT1:', time_cursor)
+#      print('SEQUENCER AT1:', time_cursor, play_slot, tempo)
       time0 = time.ticks_us()
       if len(note_off_events) > 0:
         if note_off_events[0]['time'] == time_cursor:
@@ -2742,18 +2754,18 @@ class sequencer_class():
       # Skip to next play slot
       if skip_continue:
         skip_continue = False
-  #      print('SEQ SKIP TO 0:', time_cursor, play_slot)
+#        print('SEQ SKIP TO 0:', time_cursor, play_slot)
         continue
 
       # Repeat
       if repeat_continue:
         repeat_continue = False
-  #      print('SEQ REPEAT TO 0:', time_cursor, play_slot, repeat_time, repeat_slot)
+#        print('SEQ REPEAT TO 0:', time_cursor, play_slot, repeat_time, repeat_slot)
         continue
 
       # Loop/Skip/Repeat
       repeat_ctrl = self.sequencer_get_repeat_control(time_cursor)
-  #    print('REPEAT CTRL1:', time_cursor, repeat_ctrl)
+#      print('REPEAT CTRL1:', time_cursor, repeat_ctrl)
       if not repeat_ctrl is None:
         # Loop bar point
         if repeat_ctrl['loop']:
@@ -2769,7 +2781,8 @@ class sequencer_class():
             repeat_time = -1
             repeat_slot = -1
             repeating_bars = False
-  #          print('SEQ SKIP TO 1:', time_cursor, play_slot)
+            loop_play_time = -1
+#            print('SEQ SKIP TO 1:', time_cursor, play_slot)
             continue
 
         # Repeat bar point
@@ -2781,7 +2794,7 @@ class sequencer_class():
           loop_play_time = -1
           loop_play_slot = -1
           repeating_bars = True
-  #        print('SEQ REPEAT TO 1:', time_cursor, play_slot, repeat_time, repeat_slot)
+#          print('SEQ REPEAT TO 1:', time_cursor, play_slot, repeat_time, repeat_slot)
           continue
 
       if end_time != -1 and time_cursor >= end_time:
@@ -2791,17 +2804,13 @@ class sequencer_class():
       if not score is None:
         for note_data in score['notes']:
           channel = note_data['channel']
-    #      print('SEQ NOTE ON:', time_cursor, note_data['note'])
+#          print('SEQ NOTE ON:', time_cursor, play_slot, note_data['note'])
           self.midi_obj.set_note_on(channel, note_data['note'], int(note_data['velocity'] * self.seq_channel[channel]['volume'] / 100))
           note_off_at = time_cursor + note_data['duration']
           insert_note_off(note_off_at, channel, note_data['note'])
 
       # MIDI-IN and Recording and MIDI-OUT
       midi_in_out_with_recording(time_cursor)
-
-#      time1 = time.ticks_us()
-#      timedelta = time.ticks_diff(time1, time0)
-#      time.sleep_us(tempo - timedelta)
 
       time1 = time.ticks_us()
       timedelta = time.ticks_diff(time1, time0)
@@ -2811,9 +2820,6 @@ class sequencer_class():
         timedelta = time.ticks_diff(time1, time0)
 
       time_cursor = move_play_cursor(time_cursor)
-
-#      time_cursor = move_play_cursor(time_cursor)
-
       if end_time != -1 and time_cursor >= end_time:
         break
 
@@ -2821,7 +2827,7 @@ class sequencer_class():
       play_slot = play_slot + 1
 
     # Notes off (final process)
-    print('SEQUENCER: Notes off process =', len(note_off_events))
+#    print('SEQUENCER: Notes off process =', len(note_off_events))
     trk_channel = self.get_track_midi()
     while len(note_off_events) > 0:
       score = note_off_events[0]
@@ -3213,12 +3219,12 @@ class sequencer_message_class(sequencer_class):
     # Slide score-bar display area (time)
     disp_time = self.get_seq_disp_time()
     if self.get_seq_time_cursor() < disp_time[0]:
-      self.set_seq_disp_time(disp_time[0] - self.get_seq_time_per_bar(), disp_time[1] - self.get_seq_time_per_bar())
+      self.set_seq_disp_time(disp_time[0] + delta, disp_time[1] + delta)
       self.sequencer_draw_track(0)
       self.sequencer_draw_track(1)
 
     elif self.get_seq_time_cursor() > disp_time[1]:
-      self.set_seq_disp_time(disp_time[0] + self.get_seq_time_per_bar(), disp_time[1] + self.get_seq_time_per_bar())
+      self.set_seq_disp_time(disp_time[0] + delta, disp_time[1] + delta)
       self.sequencer_draw_track(0)
       self.sequencer_draw_track(1)
 
@@ -3229,12 +3235,12 @@ class sequencer_message_class(sequencer_class):
     # Slide score-key display area (key)
     disp_key = self.get_seq_disp_key(self.edit_track())
     if self.get_seq_key_cursor(self.edit_track()) < disp_key[0]:
-      self.set_seq_disp_key(self.edit_track(), disp_key[0] - 1, disp_key[1] - 1)
+      self.set_seq_disp_key(self.edit_track(), disp_key[0] + delta, disp_key[1] + delta)
       self.sequencer_draw_keyboard(self.edit_track())
       self.sequencer_draw_track(self.edit_track())
 
     elif self.get_seq_key_cursor(self.edit_track()) > disp_key[1]:
-      self.set_seq_disp_key(self.edit_track(), disp_key[0] + 1, disp_key[1] + 1)
+      self.set_seq_disp_key(self.edit_track(), disp_key[0] + delta, disp_key[1] + delta)
       self.sequencer_draw_keyboard(self.edit_track())
       self.sequencer_draw_track(self.edit_track())
 
@@ -3402,7 +3408,7 @@ class sequencer_message_class(sequencer_class):
   def func_SEQUENCER_CHANGE_PLAY_START(self, message_data = None):
     delta = message_data['delta']
     pt = self.play_time(0) + delta
-    print('PLAY S:', pt, delta, self.play_time())
+#    print('PLAY S:', pt, delta, self.play_time())
     if pt >= 0 and pt <= self.play_time(1):
       self.play_time(0, pt)
       return True
@@ -3412,7 +3418,7 @@ class sequencer_message_class(sequencer_class):
   def func_SEQUENCER_CHANGE_PLAY_END(self, message_data = None):
     delta = message_data['delta']
     pt = self.play_time(1) + delta
-    print('PLAY E:', pt, delta, self.play_time())
+#    print('PLAY E:', pt, delta, self.play_time())
     if pt >= self.play_time(0):
       self.play_time(1, pt)
       return True
@@ -3585,6 +3591,7 @@ class midi_in_player_class():
   def __init__(self, midi_obj, sdcard_obj):
     self.sdcard_obj = sdcard_obj
     self.midi_obj = midi_obj
+    self.midi_in_override_flg = False                     # Change MIDI-IN channels to midi_in_ch or not
     self.midi_in_ch = 0                               # MIDI IN channel to edit
     self.midi_in_set_num = 0                          # MIDI IN setting file number to load/save
     self.MIDI_IN_FILE_PATH = '/sd//SYNTH/MIDIUNIT/'   # MIDI IN setting files path
@@ -3599,6 +3606,18 @@ class midi_in_player_class():
     # SYNTH settings
     for ch in range(16):
       self.midi_in_settings.append({'program':0, 'gmbank':0, 'reverb':[0,0,0], 'chorus':[0,0,0,0], 'vibrate':[0,0,0]})
+
+  # Set/Get midi_in_override
+  def midi_in_override(self, flg = None):
+    if not flg is None:
+      self.midi_in_override_flg = flg
+
+    # Override MIDI channel
+    if self.midi_in_override_flg:
+      return self.midi_in_ch
+
+    # Not override
+    return -1
 
   # Set midi_in_setting
   def set_midi_in_setting(self, val):
@@ -3833,9 +3852,24 @@ class midi_in_player_message_class(midi_in_player_class):
       self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_IN_PLAYER_LOAD_SET_FILE, self.func_MIDI_IN_PLAYER_LOAD_SET_FILE)
       self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_IN_PLAYER_SAVE_SET_FILE, self.func_MIDI_IN_PLAYER_SAVE_SET_FILE)
       self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_DEFAULT, self.func_MIDI_IN_PLAYER_SET_DEFAULT)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_IN_PLAYER_CHANNEL_OVERRIDE, self.func_MIDI_IN_PLAYER_CHANNEL_OVERRIDE)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_MIDI_IN_PLAYER_MIDI_IN_OUT, self.func_MIDI_IN_PLAYER_MIDI_IN_OUT)
 
     else:
       self.message_center = message_center_class()
+
+  def func_MIDI_IN_PLAYER_CHANNEL_OVERRIDE(self, message_data = None):
+    if message_data is None:
+      return self.midi_in_override()
+
+    return self.midi_in_override(message_data['override'])
+
+  def func_MIDI_IN_PLAYER_MIDI_IN_OUT(self, message_data = None):
+    ch = self.midi_in_override()
+    if ch >= 0:
+      return self.midi_obj.midi_in_out(ch)
+    else:
+      return self.midi_obj.midi_in_out()
 
   def func_MIDI_IN_PLAYER_SET_PROGRAM_DELTA(self, message_data = None):
     dlt = message_data['delta']
@@ -5226,6 +5260,7 @@ class device_8encoder_class(message_center_class):
 
     # Sequencer internal parameters
     self.seq_cursor_time_or_key = True             # True: Move time cursor / False: Move key cursor
+    self.seq_cursor_decade = False
 
     # I2C
     i2c0 = I2C(0, scl=Pin(33), sda=Pin(32), freq=100000)
@@ -5373,11 +5408,27 @@ class device_8encoder_class(message_center_class):
         if self.enc_parm_decade:
           self.encoder8_0.set_led_rgb(enc_ch, 0xffa000)
 
+      # ## PRE-PROCESS: Move sequencer cursor
+      elif enc_menu == self.ENC_SEQ_CURSOR1 or enc_menu == self.ENC_SEQ_CURSOR2:
+        # Sequencer cursor is time or key (toggle)
+        if enc_button and self.enc_button_ch[enc_ch-1]:
+          self.seq_cursor_time_or_key = not self.seq_cursor_time_or_key
+
+        if not self.seq_cursor_time_or_key:
+          self.encoder8_0.set_led_rgb(enc_ch, 0xffa000)
+
       ## PRE-PROCESS: Sequencer parameter encoder
       if enc_menu == self.ENC_SEQ_PARAMETER1 or enc_menu == self.ENC_SEQ_PARAMETER2:
         if delta != 0 or slide_switch_change:
           # Change the target parameter to edit with CTRL1
           self.message_center.phone_message(self, self.message_center.MSGID_SEQUENCER_CHANGE_PARAMETER, {'delta': delta})
+
+        # Sequencer cursor moving decade (toggle)
+        if enc_button and self.enc_button_ch[enc_ch-1]:
+          self.seq_cursor_decade = not self.seq_cursor_decade
+
+        if self.seq_cursor_decade:
+          self.encoder8_0.set_led_rgb(enc_ch, 0xffa000)
 
       ## PRE-PROCESS: Parameter control encoder
       if enc_menu == self.ENC_SEQ_CTRL1 or enc_menu == self.ENC_SEQ_CTRL2:
@@ -5543,8 +5594,11 @@ class device_8encoder_class(message_center_class):
 
         # All notes off of MIDI-IN player channel
         if enc_button == True:
-          ch = self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_GET_MIDI_IN_CHANNEL)
-          self.message_center.phone_message(self, self.message_center.MSGID_MIDI_ALL_NOTES_OFF, {'channel': ch})
+#          ch = self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_SET_GET_MIDI_IN_CHANNEL)
+#          self.message_center.phone_message(self, self.message_center.MSGID_MIDI_ALL_NOTES_OFF, {'channel': ch})
+          ch = self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_CHANNEL_OVERRIDE)
+          self.message_center.phone_message(self, self.message_center.MSGID_MIDI_IN_PLAYER_CHANNEL_OVERRIDE, {'override': ch < 0})
+          self.message_center.phone_message(self, self.message_center.VIEW_MIDI_IN_PLAYER_SET_COLOR, {'label': 'label_channel', 'fore': 0xff4040 if ch < 0 else 0xffffff, 'back': 0x222222})
 
       # Select program for MIDI channel
       elif enc_menu == self.ENC_MIDI_PROGRAM:
@@ -5655,20 +5709,16 @@ class device_8encoder_class(message_center_class):
 
       # Move sequencer cursor
       elif enc_menu == self.ENC_SEQ_CURSOR1 or enc_menu == self.ENC_SEQ_CURSOR2:
-        # Sequencer cursor is time or key (toggle)
-        if enc_button and self.enc_button_ch[enc_ch-1]:
-          self.seq_cursor_time_or_key = not self.seq_cursor_time_or_key
-
         if delta != 0:
           self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SHOW_CURSOR, {'edit_track': None, 'disp_time': False, 'disp_key': False})
 
           # Move time cursor
           if self.seq_cursor_time_or_key:
-            self.message_center.phone_message(self, self.message_center.MSGID_SEQUENCER_MOVE_TIME_CURSOR, {'delta': delta})
+            self.message_center.phone_message(self, self.message_center.MSGID_SEQUENCER_MOVE_TIME_CURSOR, {'delta': delta * (10 if self.seq_cursor_decade else 1)})
 
           # Move key cursor
           else:
-            self.message_center.phone_message(self, self.message_center.MSGID_SEQUENCER_MOVE_KEY_CURSOR, {'delta': delta})
+            self.message_center.phone_message(self, self.message_center.MSGID_SEQUENCER_MOVE_KEY_CURSOR, {'delta': delta * (6 if self.seq_cursor_decade else 1)})
 
           # Show cursor
           self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SHOW_CURSOR, {'edit_track': None, 'disp_time': True, 'disp_key': True})
@@ -6318,8 +6368,10 @@ def loop():
 
   # PLAYERS: Receive MIDI-IN and send data to the synthesizer and MIDI-OUT
   else:
-    received = midi_obj.midi_in_out()
+#    received = midi_obj.midi_in_out()
+    received = application.message_center.phone_message(application, application.message_center.MSGID_MIDI_IN_PLAYER_MIDI_IN_OUT)
 
+  # Show MIDI-IN data sign
   application.message_center.phone_message(application, application.message_center.MSGID_APPLICATION_FLUSH_MIDI_IN_SIGN, {'midi_in': received})
 
   # Scan device status and take actions
