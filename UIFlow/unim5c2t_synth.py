@@ -309,7 +309,7 @@ class message_definitions():
     self.MSGID_SEQUENCER_IS_MENU_PARM_CLEAR_ONE = 427
     self.MSGID_SEQUENCER_IS_MENU_PARM_CLEAR_ALL = 428
     self.MSGID_SEQUENCER_IS_MENU_PARM_NOTES_BAR = 429
-    self.MSGID_SEQUENCER_IS_MENU_PARM_NOTES_BAR = 430
+    self.MSGID_SEQUENCER_IS_MENU_PARM_PLAY_BAR = 430
     self.MSGID_SEQUENCER_IS_MENU_PARM_RESOLUTION = 431
     self.MSGID_SEQUENCER_IS_MENU_PARM_TEMPO = 432
     self.MSGID_SEQUENCER_IS_MENU_PARM_MINIMUM_NOTE = 433
@@ -1789,15 +1789,16 @@ class sequencer_class():
     self.SEQUENCER_PARM_CLEAR_ALL = 10                     # Clear all notes in all MIDI channels
     self.SEQUENCER_PARM_PLAYSTART = 11                     # Start and end time to play with sequencer
     self.SEQUENCER_PARM_PLAYEND = 12                       # End time to play with sequencer
-    self.SEQUENCER_PARM_TEMPO = 13                         # Change tempo to play sequencer
-    self.SEQUENCER_PARM_MINIMUM_NOTE = 14                  # Change minimum note length
-    self.SEQUENCER_PARM_REPEAT = 15                        # Set repeat signs (NONE/LOOP/SKIP/REPEAT)
-    self.SEQUENCER_PARM_RECORD = 16                        # MIDI note-on/off recording mode
+    self.SEQUENCER_PARM_PLAYBAR = 13                       # Start and end time at the current bar
+    self.SEQUENCER_PARM_TEMPO = 14                         # Change tempo to play sequencer
+    self.SEQUENCER_PARM_MINIMUM_NOTE = 15                  # Change minimum note length
+    self.SEQUENCER_PARM_REPEAT = 16                        # Set repeat signs (NONE/LOOP/SKIP/REPEAT)
+    self.SEQUENCER_PARM_RECORD = 17                        # MIDI note-on/off recording mode
     self.seq_parm = self.SEQUENCER_PARM_CHANNEL            # Current sequencer parameter index (= initial)
 
     # Sequencer parameter
     #   Sequencer parameter strings to show
-    self.seq_parameter_names = ['MDCH', 'MDPG', 'CHVL', 'TIME', 'STR1', 'STRA', 'VELO', 'NBAR', 'RESL', 'CLR1', 'CLRA', 'PLYS', 'PLYE', 'TMP', 'MIN', 'REPT','RECD']
+    self.seq_parameter_names = ['MDCH', 'MDPG', 'CHVL', 'TIME', 'STR1', 'STRA', 'VELO', 'NBAR', 'RESL', 'CLR1', 'CLRA', 'PLYS', 'PLYE', 'PLYB', 'TMP', 'MIN', 'REPT','RECD']
     self.seq_total_parameters = len(self.seq_parameter_names)   # Number of seq_parm
 
     # Editor/Player settings
@@ -2716,28 +2717,36 @@ class sequencer_class():
             if repeating_bars and repeat_time != -1 and repeat_slot != -1:
               time_cursor = repeat_time
               play_slot = repeat_slot
-              repeat_time = -1
-              repeat_slot = -1
-              repeating_bars = False
-              loop_play_time = -1
-              loop_play_slot = -1
+##              repeat_time = -1
+##              repeat_slot = -1
+##              repeating_bars = False
+##              loop_play_time = -1
+##              loop_play_slot = -1
               skip_continue = True
               break
 
           # Repeat bar point
-          if repeat_ctrl['repeat'] and repeating_bars == False and loop_play_time >= 0:
-            repeat_time = repeat_ctrl['time']
-            repeat_slot = play_slot
-            time_cursor = loop_play_time
-            play_slot = loop_play_slot
-            loop_play_time = -1
-            loop_play_slot = -1
-            repeating_bars = True
-            repeat_continue = True
-            break
+##          if repeat_ctrl['repeat'] and repeating_bars == False and loop_play_time >= 0:
+          if repeat_ctrl['repeat']:
+            if repeating_bars == False:
+              repeat_time = repeat_ctrl['time']
+              repeat_slot = play_slot
+              time_cursor = loop_play_time
+              play_slot = loop_play_slot
+##              loop_play_time = -1
+##              loop_play_slot = -1
+              repeating_bars = True
+              repeat_continue = True
+              break
+            else:
+              repeating_bars = False
 
           # Loop bar point
           if repeat_ctrl['loop']:
+            if loop_play_time != repeat_ctrl['time'] or loop_play_slot != play_slot:
+              repeat_time = -1
+              repeat_slot = -1
+
             loop_play_time = repeat_ctrl['time']
             loop_play_slot = play_slot
 
@@ -2769,6 +2778,10 @@ class sequencer_class():
       if not repeat_ctrl is None:
         # Loop bar point
         if repeat_ctrl['loop']:
+          if loop_play_time != repeat_ctrl['time'] or loop_play_slot != play_slot:
+            repeat_time = -1
+            repeat_slot = -1
+
           loop_play_time = repeat_ctrl['time']
           loop_play_slot = play_slot
 
@@ -2778,24 +2791,28 @@ class sequencer_class():
           if repeating_bars and repeat_time != -1 and repeat_slot != -1:
             time_cursor = repeat_time
             play_slot = repeat_slot
-            repeat_time = -1
-            repeat_slot = -1
-            repeating_bars = False
-            loop_play_time = -1
+##            repeat_time = -1
+##            repeat_slot = -1
+##            repeating_bars = False
+##            loop_play_time = -1
 #            print('SEQ SKIP TO 1:', time_cursor, play_slot)
             continue
 
         # Repeat bar point
-        if repeat_ctrl['repeat'] and repeating_bars == False and loop_play_time >= 0:
-          repeat_time = repeat_ctrl['time']
-          repeat_slot = play_slot
-          time_cursor = loop_play_time
-          play_slot = loop_play_slot
-          loop_play_time = -1
-          loop_play_slot = -1
-          repeating_bars = True
+##        if repeat_ctrl['repeat'] and repeating_bars == False and loop_play_time >= 0:
+        if repeat_ctrl['repeat']:
+          if repeating_bars == False:
+            repeat_time = repeat_ctrl['time']
+            repeat_slot = play_slot
+            time_cursor = loop_play_time
+            play_slot = loop_play_slot
+##            loop_play_time = -1
+##            loop_play_slot = -1
+            repeating_bars = True
 #          print('SEQ REPEAT TO 1:', time_cursor, play_slot, repeat_time, repeat_slot)
-          continue
+            continue
+          else:
+            repeating_bars = False
 
       if end_time != -1 and time_cursor >= end_time:
         break
@@ -2994,6 +3011,7 @@ class sequencer_message_class(sequencer_class):
       self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_IS_MENU_PARM_VELOCITY, self.func_SEQUENCER_IS_MENU_PARM_VELOCITY)
       self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_IS_MENU_PARM_PLAY_START, self.func_SEQUENCER_IS_MENU_PARM_PLAY_START)
       self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_IS_MENU_PARM_PLAY_END, self.func_SEQUENCER_IS_MENU_PARM_PLAY_END)
+      self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_IS_MENU_PARM_PLAY_BAR, self.func_SEQUENCER_IS_MENU_PARM_PLAY_BAR)
       self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_IS_MENU_PARM_STRETCH_ONE, self.func_SEQUENCER_IS_MENU_PARM_STRETCH_ONE)
       self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_IS_MENU_PARM_STRETCH_ALL, self.func_SEQUENCER_IS_MENU_PARM_STRETCH_ALL)
       self.message_center.add_subscriber(self, self.message_center.MSGID_SEQUENCER_IS_MENU_PARM_CLEAR_ONE, self.func_SEQUENCER_IS_MENU_PARM_CLEAR_ONE)
@@ -3406,22 +3424,38 @@ class sequencer_message_class(sequencer_class):
     return self.sequencer_velocity(delta)
 
   def func_SEQUENCER_CHANGE_PLAY_START(self, message_data = None):
-    delta = message_data['delta']
-    pt = self.play_time(0) + delta
-#    print('PLAY S:', pt, delta, self.play_time())
-    if pt >= 0 and pt <= self.play_time(1):
-      self.play_time(0, pt)
+    # Start and end at the current bar
+    if message_data is None:
+      tpb = self.get_seq_time_per_bar()
+      start = int(self.get_seq_time_cursor() / tpb) * tpb
+      self.play_time(0, start)
+      self.play_time(1, start + tpb)
       return True
+
+    else:
+      delta = message_data['delta']
+      pt = self.play_time(0) + delta
+#      print('PLAY S:', pt, delta, self.play_time())
+      if pt >= 0 and pt <= self.play_time(1):
+        self.play_time(0, pt)
+        return True
 
     return False
 
   def func_SEQUENCER_CHANGE_PLAY_END(self, message_data = None):
-    delta = message_data['delta']
-    pt = self.play_time(1) + delta
-#    print('PLAY E:', pt, delta, self.play_time())
-    if pt >= self.play_time(0):
-      self.play_time(1, pt)
+    # Start and end at the current cursor
+    if message_data is None:
+      self.play_time(0, self.get_seq_time_cursor())
+      self.play_time(1, self.get_seq_time_cursor())
       return True
+
+    else:
+      delta = message_data['delta']
+      pt = self.play_time(1) + delta
+#      print('PLAY E:', pt, delta, self.play_time())
+      if pt >= self.play_time(0):
+        self.play_time(1, pt)
+        return True
 
     return False
 
@@ -3544,6 +3578,9 @@ class sequencer_message_class(sequencer_class):
 
   def func_SEQUENCER_IS_MENU_PARM_PLAY_END(self, message_data = None):
     return self.seq_parm == self.SEQUENCER_PARM_PLAYEND
+
+  def func_SEQUENCER_IS_MENU_PARM_PLAY_BAR(self, message_data = None):
+    return self.seq_parm == self.SEQUENCER_PARM_PLAYBAR
 
   def func_SEQUENCER_IS_MENU_PARM_STRETCH_ONE(self, message_data = None):
     return self.seq_parm == self.SEQUENCER_PARM_STRETCH_ONE
@@ -5791,6 +5828,11 @@ class device_8encoder_class(message_center_class):
           # Change end time to finish play
           elif self.message_center.phone_message(self, self.message_center.MSGID_SEQUENCER_IS_MENU_PARM_PLAY_END):
             if self.message_center.phone_message(self, self.message_center.MSGID_SEQUENCER_CHANGE_PLAY_END, {'delta': delta * (10 if self.enc_parm_decade else 1)}):
+              self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_DRAW_TRACK)
+
+          # Change star and end time at the current bar
+          elif self.message_center.phone_message(self, self.message_center.MSGID_SEQUENCER_IS_MENU_PARM_PLAY_BAR):
+            if self.message_center.phone_message(self, self.message_center.MSGID_SEQUENCER_CHANGE_PLAY_START):
               self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_DRAW_TRACK)
 
           # Insert/Delete time at the time cursor on the current MIDI channel only
