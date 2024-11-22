@@ -2683,7 +2683,6 @@ class sequencer_class():
       tempo = int((60.0 / self.seq_control['tempo'] / (2**self.seq_control['mini_note']/4)) * 1000000)
       if score is None:
         next_notes_on = play_slot + 1
-#        next_notes_on = time_cursor + 1
       else:
         next_notes_on = score['time']
 
@@ -2717,29 +2716,26 @@ class sequencer_class():
             if repeating_bars and repeat_time != -1 and repeat_slot != -1:
               time_cursor = repeat_time
               play_slot = repeat_slot
-##              repeat_time = -1
-##              repeat_slot = -1
-##              repeating_bars = False
-##              loop_play_time = -1
-##              loop_play_slot = -1
               skip_continue = True
               break
 
           # Repeat bar point
-##          if repeat_ctrl['repeat'] and repeating_bars == False and loop_play_time >= 0:
           if repeat_ctrl['repeat']:
             if repeating_bars == False:
               repeat_time = repeat_ctrl['time']
               repeat_slot = play_slot
               time_cursor = loop_play_time
               play_slot = loop_play_slot
-##              loop_play_time = -1
-##              loop_play_slot = -1
               repeating_bars = True
               repeat_continue = True
+#              print('SEQ REPEAT TO 0:', time_cursor, play_slot, repeat_time, repeat_slot)
               break
             else:
-              repeating_bars = False
+#              print('SEQ REPEAT TO 0F:', time_cursor, play_slot, repeat_time, repeat_slot)
+              time_cursor = repeat_time
+              play_slot = repeat_slot
+              skip_continue = True
+              break
 
           # Loop bar point
           if repeat_ctrl['loop']:
@@ -2791,28 +2787,24 @@ class sequencer_class():
           if repeating_bars and repeat_time != -1 and repeat_slot != -1:
             time_cursor = repeat_time
             play_slot = repeat_slot
-##            repeat_time = -1
-##            repeat_slot = -1
-##            repeating_bars = False
-##            loop_play_time = -1
 #            print('SEQ SKIP TO 1:', time_cursor, play_slot)
             continue
 
         # Repeat bar point
-##        if repeat_ctrl['repeat'] and repeating_bars == False and loop_play_time >= 0:
         if repeat_ctrl['repeat']:
           if repeating_bars == False:
             repeat_time = repeat_ctrl['time']
             repeat_slot = play_slot
             time_cursor = loop_play_time
             play_slot = loop_play_slot
-##            loop_play_time = -1
-##            loop_play_slot = -1
             repeating_bars = True
-#          print('SEQ REPEAT TO 1:', time_cursor, play_slot, repeat_time, repeat_slot)
+#            print('SEQ REPEAT TO 1:', time_cursor, play_slot, repeat_time, repeat_slot)
             continue
           else:
             repeating_bars = False
+#            print('SEQ REPEAT TO 1F:', time_cursor, play_slot, repeat_time, repeat_slot)
+            time_cursor = repeat_time
+            play_slot = repeat_slot
 
       if end_time != -1 and time_cursor >= end_time:
         break
@@ -4576,17 +4568,33 @@ class view_sequencer_class(view_m5stack_core2):
       if t != 0:
         sc_sign = self.data_obj.sequencer_get_repeat_control(t)
         if not sc_sign is None:
+          dy = int((area[3] + y) / 2)
           if sc_sign['loop']:
+            color = 0xff8000
+            x0 = x0 + 2
+            dx = x0 + 2
+            d1 = dy - 10
+            d2 = dy + 10
+          elif sc_sign['skip']:
             color = 0xffff00
             x0 = x0 + 2
-          elif sc_sign['skip']:
-            color = 0x40a0ff
-            x0 = x0 + 2
+            dx = -1
+            d1 = x0 + 2
+            d2 = x0 + 4
           elif sc_sign['repeat']:
             color = 0xff4040
             x0 = x0 - 2
+            dx = x0 - 2
+            d1 = dy - 10
+            d2 = dy + 10
 
           M5.Lcd.drawLine(x0, y, x0, area[3], color)
+          if dx >= 0:
+            M5.Lcd.fillCircle(dx, d1, 2, color)
+            M5.Lcd.fillCircle(dx, d2, 2, color)
+          else:
+            M5.Lcd.fillCircle(d1, dy, 2, color)
+            M5.Lcd.fillCircle(d2, dy, 2, color)
 
     # Draw frame
     M5.Lcd.drawRect(x, y, w, h, 0x00ff40)
