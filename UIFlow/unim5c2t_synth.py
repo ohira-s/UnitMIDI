@@ -54,6 +54,8 @@
 #              1.0.1: 11/20/2024
 #                       Bugs in sequencer are fixed.
 #                       Improve sequencer editor.
+#              1.0.2: 11/26/2024
+#                       Bugs in sequencer repeat signs are fixed.
 #
 # Copyright (C) Shunsuke Ohira, 2024
 #####################################################################################################
@@ -2647,6 +2649,7 @@ class sequencer_class():
     loop_play_time = 0
     loop_play_slot = 0
     repeating_bars = False
+    ignore_repeat = False
     repeat_time = -1
     repeat_slot = -1
 
@@ -2661,7 +2664,7 @@ class sequencer_class():
       play_slot = play_slot + 1
 
     while play_slot < score_len or end_time > play_slot or (self.midi_recording and end_time == -1):
-#      print('SEQ POINT:', time_cursor, play_slot)
+      print('SEQ POINT:', time_cursor, play_slot)
       if play_slot < score_len:
         score = self.seq_score[play_slot]
       else:
@@ -2686,8 +2689,9 @@ class sequencer_class():
       else:
         next_notes_on = score['time']
 
+      # Loop for play slots without note-on event
       while next_notes_on > time_cursor:
-#        print('SEQUENCER AT0:', time_cursor, play_slot, tempo)
+        print('SEQUENCER AT0:', time_cursor, play_slot, tempo)
         time0 = time.ticks_us()
         if len(note_off_events) > 0:
           if note_off_events[0]['time'] == time_cursor:
@@ -2704,23 +2708,24 @@ class sequencer_class():
           time1 = time.ticks_us()
           timedelta = time.ticks_diff(time1, time0)
 
+        # Move time cursor to next play slot
         time_cursor = move_play_cursor(time_cursor)
 
         # Loop/Skip/Repeat
         repeat_ctrl = self.sequencer_get_repeat_control(time_cursor)
-#        print('REPEAT CTRL0:', time_cursor, repeat_ctrl)
+        print('REPEAT CTRL0:', time_cursor, ignore_repeat, repeating_bars, repeat_time, repeat_slot, repeat_ctrl)
         if not repeat_ctrl is None:
-          # Skip bar point
+          # Just a skip
           if repeat_ctrl['skip']:
-            # During repeat play, skip to next play slot
             if repeating_bars and repeat_time != -1 and repeat_slot != -1:
               time_cursor = repeat_time
               play_slot = repeat_slot
               skip_continue = True
               break
 
-          # Repeat bar point
-          if repeat_ctrl['repeat']:
+          # Just a repeat
+          if repeat_ctrl['repeat'] and not repeat_ctrl['loop']:
+            # Repeat to loop
             if repeating_bars == False:
               repeat_time = repeat_ctrl['time']
               repeat_slot = play_slot
@@ -2728,29 +2733,67 @@ class sequencer_class():
               play_slot = loop_play_slot
               repeating_bars = True
               repeat_continue = True
-#              print('SEQ REPEAT TO 0:', time_cursor, play_slot, repeat_time, repeat_slot)
-              break
-            else:
-#              print('SEQ REPEAT TO 0F:', time_cursor, play_slot, repeat_time, repeat_slot)
-              time_cursor = repeat_time
-              play_slot = repeat_slot
-              skip_continue = True
+              print('SEQ REPEAT TO 0:', time_cursor, play_slot, repeat_time, repeat_slot)
               break
 
-          # Loop bar point
-          if repeat_ctrl['loop']:
+            # Pass through the repeat
+            else:
+              print('SEQ REPEAT TO 0F:', time_cursor, play_slot, repeat_time, repeat_slot)
+#              time_cursor = repeat_time
+#              play_slot = repeat_slot
+              break
+
+          # Repeat with loop
+          if repeat_ctrl['repeat'] and repeat_ctrl['loop']:
+            # Same as just a loop
+            if ignore_repeat and repeat_time > time_cursor:
+              if loop_play_time != repeat_ctrl['time'] or loop_play_slot != play_slot:
+                repeat_time = -1
+                repeat_slot = -1
+
+              loop_play_time = repeat_ctrl['time']
+              loop_play_slot = play_slot
+              ignore_repeat = True
+
+            # Check repeat, then check loop
+            else:
+              # Work as a repeat
+              if repeating_bars == False:
+                repeat_time = repeat_ctrl['time']
+                repeat_slot = play_slot
+                time_cursor = loop_play_time
+                play_slot = loop_play_slot
+                repeating_bars = True
+                repeat_continue = True
+                print('SEQ REPEAT TO 0:', time_cursor, play_slot, repeat_time, repeat_slot)
+                break
+
+              # Work as a loop
+              else:
+                repeating_bars = repeat_time > time_cursor
+                if loop_play_time != repeat_ctrl['time'] or loop_play_slot != play_slot:
+                  repeat_time = -1
+                  repeat_slot = -1
+
+                loop_play_time = repeat_ctrl['time']
+                loop_play_slot = play_slot
+                ignore_repeat = True
+
+          # Just a loop
+          if repeat_ctrl['loop'] and not repeat_ctrl['repeat']:
             if loop_play_time != repeat_ctrl['time'] or loop_play_slot != play_slot:
               repeat_time = -1
               repeat_slot = -1
 
             loop_play_time = repeat_ctrl['time']
             loop_play_slot = play_slot
+            ignore_repeat = False
 
         if end_time != -1 and time_cursor >= end_time:
           break
 
       # Note off
-#      print('SEQUENCER AT1:', time_cursor, play_slot, tempo)
+      print('SEQUENCER AT1:', time_cursor, play_slot, tempo)
       time0 = time.ticks_us()
       if len(note_off_events) > 0:
         if note_off_events[0]['time'] == time_cursor:
@@ -2759,52 +2802,91 @@ class sequencer_class():
       # Skip to next play slot
       if skip_continue:
         skip_continue = False
-#        print('SEQ SKIP TO 0:', time_cursor, play_slot)
+        print('SEQ SKIP TO 0:', time_cursor, play_slot)
         continue
 
       # Repeat
       if repeat_continue:
         repeat_continue = False
-#        print('SEQ REPEAT TO 0:', time_cursor, play_slot, repeat_time, repeat_slot)
+#        ignore_repeat = True
+        print('SEQ REPEAT TO 0:', time_cursor, play_slot, repeat_time, repeat_slot)
         continue
 
-      # Loop/Skip/Repeat
+      # Loop/Skip/Repeat at the time of a note-on
       repeat_ctrl = self.sequencer_get_repeat_control(time_cursor)
-#      print('REPEAT CTRL1:', time_cursor, repeat_ctrl)
+      print('REPEAT CTRL1:', time_cursor, ignore_repeat, repeating_bars, repeat_time, repeat_slot, repeat_ctrl)
       if not repeat_ctrl is None:
-        # Loop bar point
-        if repeat_ctrl['loop']:
-          if loop_play_time != repeat_ctrl['time'] or loop_play_slot != play_slot:
-            repeat_time = -1
-            repeat_slot = -1
-
-          loop_play_time = repeat_ctrl['time']
-          loop_play_slot = play_slot
-
-        # Skip bar point
+        # Just a skip
         if repeat_ctrl['skip']:
-          # During repeat play
           if repeating_bars and repeat_time != -1 and repeat_slot != -1:
             time_cursor = repeat_time
             play_slot = repeat_slot
-#            print('SEQ SKIP TO 1:', time_cursor, play_slot)
+            print('SEQ SKIP TO 1:', time_cursor, play_slot)
             continue
 
-        # Repeat bar point
-        if repeat_ctrl['repeat']:
+        # Just a repeat
+        if repeat_ctrl['repeat'] and not repeat_ctrl['loop']:
+          # First contact with the repeat: repeat
           if repeating_bars == False:
             repeat_time = repeat_ctrl['time']
             repeat_slot = play_slot
             time_cursor = loop_play_time
             play_slot = loop_play_slot
             repeating_bars = True
-#            print('SEQ REPEAT TO 1:', time_cursor, play_slot, repeat_time, repeat_slot)
+            print('SEQ REPEAT TO 1 REPEAT:', time_cursor, play_slot, repeat_time, repeat_slot)
             continue
+          
+          # In a repeat loop: pass through
           else:
             repeating_bars = False
-#            print('SEQ REPEAT TO 1F:', time_cursor, play_slot, repeat_time, repeat_slot)
-            time_cursor = repeat_time
-            play_slot = repeat_slot
+            print('SEQ REPEAT TO 1 THROHGH:', time_cursor, play_slot, repeat_time, repeat_slot)
+#            time_cursor = repeat_time
+#            play_slot = repeat_slot
+
+        # Repeat with loop
+        if repeat_ctrl['repeat'] and repeat_ctrl['loop']:
+          # Same as just a loop
+          if ignore_repeat and repeat_time > time_cursor:
+            if loop_play_time != repeat_ctrl['time'] or loop_play_slot != play_slot:
+              repeat_time = -1
+              repeat_slot = -1
+
+            loop_play_time = repeat_ctrl['time']
+            loop_play_slot = play_slot
+            ignore_repeat = True
+
+          # Check repeat, then check loop
+          else:
+            # Work as a repeat
+            if repeating_bars == False:
+              repeat_time = repeat_ctrl['time']
+              repeat_slot = play_slot
+              time_cursor = loop_play_time
+              play_slot = loop_play_slot
+              repeating_bars = True
+              print('SEQ REPEAT TO 1 REPEAT:', time_cursor, play_slot, repeat_time, repeat_slot)
+              continue
+
+            # Work as a loop
+            else:
+              repeating_bars = repeat_time > time_cursor
+              if loop_play_time != repeat_ctrl['time'] or loop_play_slot != play_slot:
+                repeat_time = -1
+                repeat_slot = -1
+
+              loop_play_time = repeat_ctrl['time']
+              loop_play_slot = play_slot
+              ignore_repeat = True
+
+        # Just a loop
+        if repeat_ctrl['loop'] and not repeat_ctrl['repeat']:
+          if loop_play_time != repeat_ctrl['time'] or loop_play_slot != play_slot:
+            repeat_time = -1
+            repeat_slot = -1
+
+          loop_play_time = repeat_ctrl['time']
+          loop_play_slot = play_slot
+          ignore_repeat = False
 
       if end_time != -1 and time_cursor >= end_time:
         break
@@ -2813,7 +2895,7 @@ class sequencer_class():
       if not score is None:
         for note_data in score['notes']:
           channel = note_data['channel']
-#          print('SEQ NOTE ON:', time_cursor, play_slot, note_data['note'])
+          print('SEQ NOTE ON:', time_cursor, play_slot, note_data['note'])
           self.midi_obj.set_note_on(channel, note_data['note'], int(note_data['velocity'] * self.seq_channel[channel]['volume'] / 100))
           note_off_at = time_cursor + note_data['duration']
           insert_note_off(note_off_at, channel, note_data['note'])
@@ -3173,18 +3255,7 @@ class sequencer_message_class(sequencer_class):
       self.send_sequencer_current_channel_settings(self.get_track_midi())
 
   def func_SEQUENCER_FILE_LOADED(self, message_data):
-    disp = 'NON'
-    if not self.seq_parm_repeat is None:
-      rept = self.sequencer_get_repeat_control(self.seq_parm_repeat)
-      disp = 'NON'
-      if not rept is None:
-        if rept['loop']:
-          disp = 'LOP'
-        elif rept['skip']:
-          disp = 'SKP'
-        elif rept['repeat']:
-          disp = 'RPT'
-    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_parm_value', 'value': disp})
+#    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_REPEAT_SIGN_SET_TEXT)
 
     for trk in range(2):
       ch = self.seq_track_midi[trk]
@@ -3201,13 +3272,13 @@ class sequencer_message_class(sequencer_class):
 
   def func_SEQUENCER_MIDI_CHANNEL_CHANGED(self, message_data = None):
     channel = self.seq_track_midi[self.seq_edit_track]
+    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_parm_value', 'value': '{:02d}'.format(channel + 1)})
     if channel == 9:
       prg = 'DRUM SET'
     else:
       prg = self.message_center.phone_message(self, self.message_center.MSGID_MIDI_GET_PROGRAM_NAME, {'gm_bank': self.seq_control['gmbank'][channel], 'program_number': self.seq_control['program'][channel]})
 
     prg = prg[:9]
-
     if   self.seq_edit_track == 0:
       self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_TRACK1_SET_TEXT)
       self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_program1', 'value': prg})
@@ -3339,7 +3410,7 @@ class sequencer_message_class(sequencer_class):
         rept_signs = self.message_center.phone_message(self, self.message_center.MSGID_SEQUENCER_GET_REPEAT_SIGNS, {'time': rept_cursor})
 
         # none <-- loop --> skip
-        if rept_signs['loop']:
+        if rept_signs['loop'] and not rept_signs['repeat']:
           rept_signs['loop'] = False
           if delta == 1:
             rept_signs['skip'] = True
@@ -3352,18 +3423,25 @@ class sequencer_message_class(sequencer_class):
           else:
             rept_signs['repeat'] = True
 
-        # skip <-- repeat --> none
-        elif rept_signs['repeat']:
-          rept_signs['repeat'] = False
+        # skip <-- repeat --> repeat & loop
+        elif rept_signs['repeat'] and not rept_signs['loop']:
           if delta == -1:
+            rept_signs['repeat'] = False
             rept_signs['skip'] = True
-
-        # repeat <-- none --> loop
-        else:
-          if delta == -1:
-            rept_signs['repeat'] = True
           else:
             rept_signs['loop'] = True
+
+        # repeat <-- repeat & loop --> none
+        elif rept_signs['repeat'] and rept_signs['loop']:
+          rept_signs['loop'] = False
+          if delta == 1:
+            rept_signs['repeat'] = False
+
+        # repeat & loop <-- none --> loop
+        else:
+          rept_signs['loop'] = True
+          if delta == -1:
+            rept_signs['repeat'] = True
 
         # Set the repeat signs
 #        print('SET REPEAT SIGNS:', rept_signs)
@@ -4569,24 +4647,35 @@ class view_sequencer_class(view_m5stack_core2):
         sc_sign = self.data_obj.sequencer_get_repeat_control(t)
         if not sc_sign is None:
           dy = int((area[3] + y) / 2)
-          if sc_sign['loop']:
-            color = 0xff8000
-            x0 = x0 + 2
-            dx = x0 + 2
-            d1 = dy - 10
-            d2 = dy + 10
-          elif sc_sign['skip']:
+          if sc_sign['skip']:
             color = 0xffff00
             x0 = x0 + 2
             dx = -1
             d1 = x0 + 2
             d2 = x0 + 4
-          elif sc_sign['repeat']:
-            color = 0xff4040
-            x0 = x0 - 2
-            dx = x0 - 2
-            d1 = dy - 10
-            d2 = dy + 10
+
+          else:
+            if sc_sign['loop']:
+              color = 0xff8000
+              x0 = x0 + 2
+              dx = x0 + 2
+              d1 = dy - 10
+              d2 = dy + 10
+
+              M5.Lcd.drawLine(x0, y, x0, area[3], color)
+              if dx >= 0:
+                M5.Lcd.fillCircle(dx, d1, 2, color)
+                M5.Lcd.fillCircle(dx, d2, 2, color)
+              else:
+                M5.Lcd.fillCircle(d1, dy, 2, color)
+                M5.Lcd.fillCircle(d2, dy, 2, color)
+
+            if sc_sign['repeat']:
+              color = 0xff4040
+              x0 = x0 - 2
+              dx = x0 - 2
+              d1 = dy - 10
+              d2 = dy + 10
 
           M5.Lcd.drawLine(x0, y, x0, area[3], color)
           if dx >= 0:
@@ -4716,10 +4805,6 @@ class view_sequencer_class(view_m5stack_core2):
 
   def func_SEQUENCER_ACTIVATED(self, message_data):
     self.data_obj.set_cursor_note(self.data_obj.sequencer_find_note(self.data_obj.edit_track(), self.data_obj.get_seq_time_cursor(), self.data_obj.get_seq_key_cursor(self.data_obj.edit_track())))
-#    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_DRAW_TRACK)
-#    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_COLOR, {'label': 'label_seq_key1', 'fore': 0xff4040 if self.data_obj.edit_track() == 0 else 0x00ccff, 'back': 0x222222})
-#    self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_COLOR, {'label': 'label_seq_key2', 'fore': 0xff4040 if self.data_obj.edit_track() == 1 else 0x00ccff, 'back': 0x222222})
-
     self.data_obj.send_all_sequencer_settings()
 
     # Set MIDI channel 1 program as the current MIDI channel program
@@ -4813,17 +4898,20 @@ class view_sequencer_class(view_m5stack_core2):
       if 'time' in message_data.keys():
         rept_cursor = message_data['time']
       else:
-        rept_cursor = self.data_obj.get_seq_parm_repeat()
+        rept_cursor = self.data_obj.get_seq_time_cursor()
     else:
-      rept_cursor = self.data_obj.get_seq_parm_repeat()
+      rept_cursor = self.data_obj.get_seq_time_cursor()
 
     # Show the current repeat sign
-    disp = 'NON'
+    disp = '   '
     if rept_cursor > 0:
       rept_signs = self.message_center.phone_message(self, self.message_center.MSGID_SEQUENCER_GET_REPEAT_SIGNS, {'time': rept_cursor})
       if not rept_signs is None:
         if rept_signs['loop']:
-          disp = 'LOP'
+          if rept_signs['repeat']:
+            disp = 'R&L'
+          else:
+            disp = 'LOP'
         elif rept_signs['skip']:
           disp = 'SKP'
         elif rept_signs['repeat']:
@@ -4942,6 +5030,8 @@ class view_sequencer_class(view_m5stack_core2):
       self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_parm_value', 'format': '{:03d}', 'value': self.data_obj.get_seq_channel(self.data_obj.get_track_midi(), 'volume')})
     elif self.data_obj.seq_parm == self.data_obj.SEQUENCER_PARM_RECORD:
       self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_RECORD_MODE)
+    elif self.data_obj.seq_parm == self.data_obj.SEQUENCER_PARM_REPEAT:
+      self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_REPEAT_SIGN_SET_TEXT)
     else:
       self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_parm_value', 'value': '  '})
 
@@ -5485,18 +5575,8 @@ class device_8encoder_class(message_center_class):
           self.encoder8_0.set_led_rgb(enc_ch, 0xffa000)
 
         # Show repeat sign parameter just after changing the current time
-        rept = self.message_center.phone_message(self, self.message_center.MSGID_SEQUENCER_GET_REPEAT_FLAG)
-        if not rept is None:
-          if rept['loop']:
-            disp = 'LOP'
-          elif rept['skip']:
-            disp = 'SKP'
-          elif rept['repeat']:
-            disp = 'RPT'
-          else:
-            disp = 'NON'
-
-          self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_SET_TEXT, {'label': 'label_seq_parm_value', 'value': disp})
+        if not self.message_center.phone_message(self, self.message_center.MSGID_SEQUENCER_GET_REPEAT_FLAG) is None:
+          self.message_center.phone_message(self, self.message_center.VIEW_SEQUENCER_REPEAT_SIGN_SET_TEXT)
 
       ## MENU PROCESS
       # Select SMF file
